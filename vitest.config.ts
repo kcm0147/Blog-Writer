@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     globals: true,
+    clearMocks: true,
     setupFiles: ["./tests/setup.ts"],
     server: {
       deps: {
