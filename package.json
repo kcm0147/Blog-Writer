@@ -14,7 +14,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
     "@google/generative-ai": "^0.21.0",
-    "better-sqlite3": "^11.5.0",
+    "better-sqlite3": "^12.10.0",
     "electron-store": "^10.0.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
@@ -22,8 +22,8 @@
     "sharp": "^0.33.5"
   },
   "devDependencies": {
-    "@testing-library/react": "^16.0.0",
     "@testing-library/jest-dom": "^6.5.0",
+    "@testing-library/react": "^16.0.0",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.5.0",
     "@types/react": "^18.3.0",
