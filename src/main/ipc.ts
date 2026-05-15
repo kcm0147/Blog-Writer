@@ -9,6 +9,7 @@ import { listHistory, getHistory, deleteHistory } from "./storage/history";
 import { runAnalyze } from "./services/styleAnalyzer";
 import { runGenerate } from "./services/postGenerator";
 import { makeProvider } from "./llm";
+import { toUserMessage } from "./llm/errors";
 import { getDb } from "./db-singleton";
 import { prepareImage } from "./images/load";
 import type { Provider, GenerateInput } from "@shared/types";
@@ -32,10 +33,18 @@ export function registerIpc(): void {
   ipcMain.handle("settings:setApiKey", (_e, p: Provider, key: string) => setApiKey(p, key));
   ipcMain.handle("settings:clearApiKey", (_e, p: Provider) => clearApiKey(p));
   ipcMain.handle("settings:validateApiKey", async (_e, p: Provider) => {
-    if (!isValidProvider(p)) throw new Error(`Invalid provider: ${String(p)}`);
+    if (!isValidProvider(p)) return { ok: false, message: "Invalid provider" };
     const key = getApiKey(p);
-    if (!key) return false;
-    return await makeProvider(p, key).validateApiKey();
+    if (!key) return { ok: false, message: "API 키가 등록되어 있지 않습니다." };
+    try {
+      const ok = await makeProvider(p, key).validateApiKey();
+      return ok
+        ? { ok: true }
+        : { ok: false, message: "키가 유효하지 않습니다. 다시 확인해주세요." };
+    } catch (e) {
+      console.error("validateApiKey error", e);
+      return { ok: false, message: toUserMessage(e) };
+    }
   });
 
   ipcMain.handle("images:prepare", (_e, filename: string, data: number[]) =>
@@ -50,22 +59,32 @@ export function registerIpc(): void {
 
   ipcMain.handle("style:getProfile", () => loadProfile(getDb()));
   ipcMain.handle("style:analyze", async () => {
-    const { provider } = getSettings();
-    if (!isValidProvider(provider)) throw new Error(`Invalid provider: ${String(provider)}`);
-    const key = requireApiKey(provider);
-    return runAnalyze(getDb(), makeProvider(provider, key), {
-      onProgress: (s) => emitProgress("style:progress", s),
-      onWarning: (w) => emitProgress("style:warning", w),
-    });
+    try {
+      const { provider } = getSettings();
+      if (!isValidProvider(provider)) throw new Error(`Invalid provider: ${String(provider)}`);
+      const key = requireApiKey(provider);
+      return await runAnalyze(getDb(), makeProvider(provider, key), {
+        onProgress: (s) => emitProgress("style:progress", s),
+        onWarning: (w) => emitProgress("style:warning", w),
+      });
+    } catch (e) {
+      console.error("style:analyze error", e);
+      throw new Error(toUserMessage(e));
+    }
   });
 
   ipcMain.handle("generate:run", async (_e, input: GenerateInput) => {
-    const { provider } = getSettings();
-    if (!isValidProvider(provider)) throw new Error(`Invalid provider: ${String(provider)}`);
-    const key = requireApiKey(provider);
-    return runGenerate(getDb(), makeProvider(provider, key), input, {
-      onProgress: (s) => emitProgress("generate:progress", s),
-    });
+    try {
+      const { provider } = getSettings();
+      if (!isValidProvider(provider)) throw new Error(`Invalid provider: ${String(provider)}`);
+      const key = requireApiKey(provider);
+      return await runGenerate(getDb(), makeProvider(provider, key), input, {
+        onProgress: (s) => emitProgress("generate:progress", s),
+      });
+    } catch (e) {
+      console.error("generate:run error", e);
+      throw new Error(toUserMessage(e));
+    }
   });
 
   ipcMain.handle("history:list", () => listHistory(getDb()));

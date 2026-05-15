@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { useCounts } from "../lib/counts";
 import {
   IconChat, IconCircleInfo, IconEye, IconGrid, IconInfo, IconLock, IconSun,
 } from "../lib/icons";
@@ -8,10 +9,15 @@ import type { Provider, SettingsWithKeyStatus } from "@shared/types";
 type Tab = "ai" | "defaults" | "data" | "about";
 
 export default function Settings() {
+  const { refresh: refreshAppState } = useCounts();
   const [tab, setTab] = useState<Tab>("ai");
   const [s, setS] = useState<SettingsWithKeyStatus | null>(null);
 
-  const refresh = async () => setS(await api.settings.get());
+  const refresh = async () => {
+    const next = await api.settings.get();
+    setS(next);
+    void refreshAppState();
+  };
   useEffect(() => { void refresh(); }, []);
 
   if (!s) {
@@ -94,11 +100,11 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
     setValidateState({ state: "checking" });
     const start = Date.now();
     try {
-      const ok = await api.settings.validateApiKey(s.provider);
+      const res = await api.settings.validateApiKey(s.provider);
       const ms = Date.now() - start;
-      setValidateState(ok
+      setValidateState(res.ok
         ? { state: "ok", ms }
-        : { state: "fail", ms, msg: "키가 유효하지 않아요" });
+        : { state: "fail", ms, msg: res.message ?? "키가 유효하지 않아요" });
     } catch (e) {
       setValidateState({ state: "fail", ms: Date.now() - start, msg: (e as Error).message });
     }
