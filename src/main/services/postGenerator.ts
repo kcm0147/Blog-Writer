@@ -2,15 +2,12 @@ import type { Database } from "better-sqlite3";
 import type { LLMProvider } from "@main/llm/types";
 import { loadProfile } from "@main/storage/styleProfile";
 import { saveGeneration } from "@main/storage/history";
-import type { GenerateInput, GenerationResult, HistoryRecord } from "@shared/types";
+import type { GenerateInput, GenerationResult } from "@shared/types";
+import type { GenerateOutcome } from "@shared/generate-outcome";
+
+export type { GenerateOutcome };
 
 const LENGTH_TOLERANCE = 0.2;
-
-export interface GenerateOutcome {
-  result: GenerationResult;
-  record: HistoryRecord;
-  warnings: string[];
-}
 
 export async function runGenerate(
   db: Database,

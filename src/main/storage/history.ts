@@ -37,7 +37,7 @@ const toRecord = (r: Row): HistoryRecord => ({
 });
 
 export function saveGeneration(db: Database, input: SaveInput): HistoryRecord {
-  const id = randomUUID().slice(0, 12);
+  const id = randomUUID();
   const createdAt = new Date().toISOString();
   db.prepare(
     `INSERT INTO generations (id, store_name, address, post_type, title, body, hashtags, image_map, created_at)

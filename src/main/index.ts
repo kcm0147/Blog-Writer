@@ -7,7 +7,7 @@ function createWindow() {
     width: 1280, height: 800,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
-      contextIsolation: true, nodeIntegration: false, sandbox: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL);

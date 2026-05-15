@@ -22,7 +22,7 @@ export function addSample(
   db: Database,
   { label, body }: { label: string; body: string },
 ): Sample {
-  const id = randomUUID().slice(0, 12);
+  const id = randomUUID();
   const charCount = body.length;
   const createdAt = new Date().toISOString();
   db.prepare(

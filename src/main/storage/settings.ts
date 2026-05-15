@@ -4,6 +4,18 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "
 import { join } from "path";
 import type { Provider, SettingsWithKeyStatus } from "@shared/types";
 
+const VALID_PROVIDERS: ReadonlySet<Provider> = new Set(["claude", "gemini"]);
+
+export function isValidProvider(p: unknown): p is Provider {
+  return typeof p === "string" && VALID_PROVIDERS.has(p as Provider);
+}
+
+function assertProvider(p: unknown): asserts p is Provider {
+  if (!isValidProvider(p)) {
+    throw new Error(`Invalid provider: ${String(p)}`);
+  }
+}
+
 type StoreSchema = { provider: Provider; useWebSearch: boolean };
 
 const store = new Store<StoreSchema>({
@@ -17,6 +29,7 @@ function keysDir(): string {
 }
 
 function keyPath(p: Provider): string {
+  assertProvider(p);
   return join(keysDir(), `${p}.bin`);
 }
 
@@ -32,6 +45,7 @@ export function getSettings(): SettingsWithKeyStatus {
 }
 
 export function setProvider(p: Provider): void {
+  assertProvider(p);
   store.set("provider", p);
 }
 
@@ -40,6 +54,7 @@ export function setWebSearch(on: boolean): void {
 }
 
 export function setApiKey(p: Provider, key: string): void {
+  assertProvider(p);
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error("OS 보안 저장소를 사용할 수 없습니다.");
   }
@@ -48,6 +63,7 @@ export function setApiKey(p: Provider, key: string): void {
 }
 
 export function getApiKey(p: Provider): string | null {
+  assertProvider(p);
   const path = keyPath(p);
   if (!existsSync(path)) return null;
   const buf = readFileSync(path);
@@ -55,6 +71,7 @@ export function getApiKey(p: Provider): string | null {
 }
 
 export function clearApiKey(p: Provider): void {
+  assertProvider(p);
   const path = keyPath(p);
   if (existsSync(path)) unlinkSync(path);
 }

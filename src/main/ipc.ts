@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from "electron";
 import {
   getSettings, setProvider, setWebSearch, setApiKey, clearApiKey, getApiKey,
+  isValidProvider,
 } from "./storage/settings";
 import { addSample, listSamples, deleteSample } from "./storage/samples";
 import { loadProfile } from "./storage/styleProfile";
@@ -9,6 +10,7 @@ import { runAnalyze } from "./services/styleAnalyzer";
 import { runGenerate } from "./services/postGenerator";
 import { makeProvider } from "./llm";
 import { getDb } from "./db-singleton";
+import { prepareImage } from "./images/load";
 import type { Provider, GenerateInput } from "@shared/types";
 
 function emitProgress(channel: string, stage: string) {
@@ -30,10 +32,15 @@ export function registerIpc(): void {
   ipcMain.handle("settings:setApiKey", (_e, p: Provider, key: string) => setApiKey(p, key));
   ipcMain.handle("settings:clearApiKey", (_e, p: Provider) => clearApiKey(p));
   ipcMain.handle("settings:validateApiKey", async (_e, p: Provider) => {
+    if (!isValidProvider(p)) throw new Error(`Invalid provider: ${String(p)}`);
     const key = getApiKey(p);
     if (!key) return false;
     return await makeProvider(p, key).validateApiKey();
   });
+
+  ipcMain.handle("images:prepare", (_e, filename: string, data: number[]) =>
+    prepareImage(filename, Buffer.from(data)),
+  );
 
   ipcMain.handle("samples:list", () => listSamples(getDb()));
   ipcMain.handle("samples:add", (_e, input: { label: string; body: string }) =>
@@ -44,6 +51,7 @@ export function registerIpc(): void {
   ipcMain.handle("style:getProfile", () => loadProfile(getDb()));
   ipcMain.handle("style:analyze", async () => {
     const { provider } = getSettings();
+    if (!isValidProvider(provider)) throw new Error(`Invalid provider: ${String(provider)}`);
     const key = requireApiKey(provider);
     return runAnalyze(getDb(), makeProvider(provider, key), {
       onProgress: (s) => emitProgress("style:progress", s),
@@ -53,6 +61,7 @@ export function registerIpc(): void {
 
   ipcMain.handle("generate:run", async (_e, input: GenerateInput) => {
     const { provider } = getSettings();
+    if (!isValidProvider(provider)) throw new Error(`Invalid provider: ${String(provider)}`);
     const key = requireApiKey(provider);
     return runGenerate(getDb(), makeProvider(provider, key), input, {
       onProgress: (s) => emitProgress("generate:progress", s),
