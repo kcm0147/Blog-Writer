@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useCounts } from "../lib/counts";
@@ -53,9 +53,12 @@ function missingCount(m: MissingFields): number {
 }
 
 export default function Compose() {
-  const { refresh: refreshCounts, samples } = useCounts();
+  const { refresh: refreshCounts, samples, settings } = useCounts();
   const [profile, setProfile] = useState<StyleProfile | null>(null);
-  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+  const hasApiKey: boolean | null = settings
+    ? settings.hasApiKey[settings.provider]
+    : null;
+  const useWebSearchSetting = settings?.useWebSearch ?? false;
 
   // form fields
   const [postType, setPostType] = useState<PostType>("맛집");
@@ -72,28 +75,31 @@ export default function Compose() {
   const [memo, setMemo] = useState("");
   const [images, setImages] = useState<ImageInput[]>([]);
 
-  // settings-derived
-  const [useWebSearchSetting, setUseWebSearchSetting] = useState(false);
-
   // flow state
   const [phase, setPhase] = useState<Phase>("idle");
   const [showValidation, setShowValidation] = useState(false);
   const [progressStage, setProgressStage] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<GenerateOutcome | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
-    void api.style.getProfile().then(setProfile);
-    void api.settings.get().then((s) => {
-      setUseWebSearchSetting(s.useWebSearch);
-      setHasApiKey(s.hasApiKey[s.provider]);
+    void api.style.getProfile().then((p) => {
+      if (mountedRef.current) setProfile(p);
     });
   }, []);
 
   useEffect(() => {
-    const off = api.generate.onProgress(setProgressStage);
+    const off = api.generate.onProgress((stage) => {
+      if (mountedRef.current) setProgressStage(stage);
+    });
     return () => off();
   }, []);
 
@@ -103,12 +109,19 @@ export default function Compose() {
   );
   const missing = missingCount(validation);
 
-  const memoChars = memo.length;
+  const memoChars = memo.trim().length;
 
   // --- File handling ---
   const onFiles = async (files: FileList | null) => {
     if (!files) return;
     const remaining = 10 - images.length;
+    if (files.length > remaining) {
+      const excess = files.length - remaining;
+      setPhotoNotice(`사진은 최대 10장까지만 첨부할 수 있어요. ${excess}장은 제외됐습니다.`);
+      window.setTimeout(() => {
+        if (mountedRef.current) setPhotoNotice(null);
+      }, 5000);
+    }
     const next: ImageInput[] = [];
     for (let i = 0; i < Math.min(files.length, remaining); i++) {
       const f = files[i];
@@ -120,6 +133,7 @@ export default function Compose() {
         console.error("image prepare failed", e);
       }
     }
+    if (!mountedRef.current) return;
     setImages((prev) => [...prev, ...next].slice(0, 10));
   };
 
@@ -173,29 +187,32 @@ export default function Compose() {
 
     try {
       const res = await api.generate.run(input);
+      if (!mountedRef.current) return;
       setOutcome(res);
       setPhase("result");
       void refreshCounts();
     } catch (e) {
+      if (!mountedRef.current) return;
       setErrorMessage((e as Error).message || "알 수 없는 오류");
       setPhase("error");
     } finally {
-      setProgressStage(null);
+      if (mountedRef.current) setProgressStage(null);
     }
   };
 
-  const onReset = () => {
+  const onReset = useCallback(() => {
     setStoreName(""); setAddress(""); setVisitDate("");
     setPostType("맛집"); setPostTypeExtra("");
     setTitle(""); setKeywords([]); setKeywordDraft("");
     setEmphasis(""); setMemo(""); setImages([]);
     setLength(1500); setTone("my_style");
     setShowValidation(false); setPhase("idle"); setOutcome(null); setErrorMessage(null);
-  };
+    setPhotoNotice(null);
+  }, []);
 
   // Profile / API key gating
   const noProfile = profile === null;
-  const noKey = hasApiKey === false;
+  const noKey = hasApiKey !== true;
 
   // --- Footer ---
   const submitDisabled = phase === "loading" || noProfile || noKey;
@@ -351,6 +368,11 @@ export default function Compose() {
               )}
             </div>
           )}
+          {photoNotice && (
+            <div className="field-msg field-msg--warn" style={{ marginTop: 8 }}>
+              <span className="field-msg__icon">!</span>{photoNotice}
+            </div>
+          )}
           <div className="form-helper">사진을 끌어서 순서를 바꿀 수 있어요. 본문의 <code>[사진1]</code> 마커가 위 순서와 매칭돼요.</div>
         </div>
 
@@ -482,6 +504,7 @@ export default function Compose() {
         missing={missing}
         photoCount={images.length}
         onSubmit={onSubmit}
+        onReset={onReset}
         disabled={submitDisabled}
       />
     </div>
@@ -498,9 +521,10 @@ function ComposeFooter(props: {
   missing: number;
   photoCount: number;
   onSubmit: () => void;
+  onReset: () => void;
   disabled: boolean;
 }) {
-  const { phase, storeName, length, tone, missing, onSubmit, disabled } = props;
+  const { phase, storeName, length, tone, missing, onSubmit, onReset, disabled } = props;
 
   if (phase === "loading") {
     return (
@@ -539,7 +563,7 @@ function ComposeFooter(props: {
           <span className="status-text"><b>완료</b> · 히스토리에 저장됨</span>
         </div>
         <div className="compose__footer-meta"><span>새 글로 다시 시작할 수 있어요</span></div>
-        <button className="btn btn--primary btn--lg" onClick={() => window.location.reload()}>
+        <button className="btn btn--primary btn--lg" onClick={onReset}>
           새 글 쓰기
           <IconPlus />
         </button>
@@ -654,16 +678,18 @@ function LoadingResult({ stage, photoCount }: { stage: string | null; photoCount
   useEffect(() => {
     setActiveIdx(0);
     const intervals = [3000, 6000, 9000];
-    const timers = intervals.map((ms, i) => setTimeout(() => setActiveIdx(i + 1), ms));
+    const timers = intervals.map((ms, i) =>
+      setTimeout(() => setActiveIdx((prev) => Math.max(prev, i + 1)), ms),
+    );
     return () => timers.forEach(clearTimeout);
   }, []);
 
   // Bump if real stage hints at later step
   useEffect(() => {
     if (!stage) return;
-    if (/완료|마무리|해시태그/.test(stage)) setActiveIdx(Math.max(activeIdx, 3));
-    else if (/작성|본문|생성/.test(stage)) setActiveIdx(Math.max(activeIdx, 2));
-  }, [stage, activeIdx]);
+    if (/완료|마무리|해시태그/.test(stage)) setActiveIdx((prev) => Math.max(prev, 3));
+    else if (/작성|본문|생성/.test(stage)) setActiveIdx((prev) => Math.max(prev, 2));
+  }, [stage]);
 
   return (
     <div className="loading">
@@ -811,7 +837,7 @@ function ResultView({
       <div className="result__actions">
         <button className="btn btn--secondary" onClick={onReset}>
           <IconRefresh />
-          다시 만들기
+          처음부터 다시
         </button>
         <button className="btn btn--secondary" onClick={copyMarkdown}>
           <IconCopy />
