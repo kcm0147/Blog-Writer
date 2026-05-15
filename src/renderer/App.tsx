@@ -1,7 +1,22 @@
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import Layout from "./Layout";
+import Compose from "./routes/Compose";
+import MyStyle from "./routes/MyStyle";
+import History from "./routes/History";
+import Settings from "./routes/Settings";
+
 export default function App() {
   return (
-    <div className="h-full flex items-center justify-center text-2xl text-slate-700">
-      naver-blog-writer 부팅 완료
-    </div>
+    <HashRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Compose />} />
+          <Route path="/style" element={<MyStyle />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Route>
+      </Routes>
+    </HashRouter>
   );
 }
