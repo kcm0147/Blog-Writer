@@ -213,6 +213,10 @@ export default function Compose() {
     setLength(1500); setTone("my_style");
     setShowValidation(false); setPhase("idle"); setOutcome(null); setErrorMessage(null);
     setPhotoNotice(null);
+    if (photoNoticeTimerRef.current) {
+      clearTimeout(photoNoticeTimerRef.current);
+      photoNoticeTimerRef.current = null;
+    }
   }, []);
 
   // Profile / API key gating

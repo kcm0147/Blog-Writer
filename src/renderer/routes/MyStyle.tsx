@@ -80,7 +80,7 @@ export default function MyStyle() {
     !search || sample.label.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const totalChars = samples.reduce((sum, s) => sum + s.charCount, 0);
+  const totalChars = samples.reduce((sum, sample) => sum + sample.charCount, 0);
   const lastUpdated = profile?.updatedAt
     ? new Date(profile.updatedAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })
     : "—";

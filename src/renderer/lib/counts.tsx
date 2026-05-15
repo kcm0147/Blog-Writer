@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { SettingsWithKeyStatus } from "@shared/types";
 
@@ -20,6 +20,8 @@ export function CountsProvider({ children }: { children: React.ReactNode }) {
   const [samples, setSamples] = useState(0);
   const [history, setHistory] = useState(0);
   const [settings, setSettings] = useState<SettingsWithKeyStatus | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -28,6 +30,7 @@ export function CountsProvider({ children }: { children: React.ReactNode }) {
         api.history.list(),
         api.settings.get(),
       ]);
+      if (!mountedRef.current) return;
       setSamples(s.length);
       setHistory(h.length);
       setSettings(st);
