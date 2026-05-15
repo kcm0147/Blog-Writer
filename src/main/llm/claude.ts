@@ -7,19 +7,18 @@ import {
   buildAnalyzeSystemPrompt, buildAnalyzeUserPrompt,
   buildGenerateSystemPrompt, buildGenerateUserPrompt,
 } from "./prompts";
+import { buildImageMap, cleanHashtags, withJsonRetry } from "./utils";
 
 const MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS = 4096;
-const FENCE_RE = /^```(?:json)?\s*|\s*```$/gm;
 
-function parseJson<T>(text: string): T {
-  const cleaned = text.replace(FENCE_RE, "").trim();
-  try {
-    return JSON.parse(cleaned) as T;
-  } catch (e) {
-    throw new Error(`Claude JSON 파싱 실패: ${(e as Error).message}\n원문: ${text.slice(0, 300)}`);
-  }
-}
+// web_search_20250305 is a server-side tool not yet present in
+// Anthropic SDK v0.40's ToolUnion. Define a minimal local type.
+type WebSearchTool = {
+  type: "web_search_20250305";
+  name: "web_search";
+  max_uses: number;
+};
 
 export class ClaudeProvider implements LLMProvider {
   readonly name = "claude" as const;
@@ -36,19 +35,25 @@ export class ClaudeProvider implements LLMProvider {
         messages: [{ role: "user", content: "ping" }],
       });
       return true;
-    } catch {
-      return false;
+    } catch (e) {
+      const status = (e as { status?: number })?.status;
+      if (status === 401 || status === 403) return false;
+      // Non-auth error: log and re-throw so caller can distinguish
+      // network/rate-limit problems from genuine auth failures.
+      console.error("[ClaudeProvider.validateApiKey] non-auth error:", e);
+      throw e;
     }
   }
 
   async analyzeStyle(samples: string[]): Promise<StyleProfileCore> {
-    const message = await this.client.messages.create({
-      model: MODEL, max_tokens: MAX_TOKENS,
-      system: buildAnalyzeSystemPrompt(),
-      messages: [{ role: "user", content: buildAnalyzeUserPrompt(samples) }],
-    });
-    const text = this.extractText(message);
-    return parseJson<StyleProfileCore>(text);
+    return withJsonRetry<StyleProfileCore>(async () => {
+      const message = await this.client.messages.create({
+        model: MODEL, max_tokens: MAX_TOKENS,
+        system: buildAnalyzeSystemPrompt(),
+        messages: [{ role: "user", content: buildAnalyzeUserPrompt(samples) }],
+      });
+      return this.extractText(message);
+    }, "Claude");
   }
 
   async generatePost(args: {
@@ -66,29 +71,37 @@ export class ClaudeProvider implements LLMProvider {
     }
     content.push({ type: "text", text: buildGenerateUserPrompt(input, imageMarkers) });
 
-    const message = await this.client.messages.create({
-      model: MODEL, max_tokens: MAX_TOKENS,
-      system: [{
-        type: "text",
-        text: buildGenerateSystemPrompt(profile),
-        cache_control: { type: "ephemeral" },
-      }],
-      messages: [{ role: "user", content }],
-    });
+    const webSearchTool: WebSearchTool = {
+      type: "web_search_20250305",
+      name: "web_search",
+      max_uses: 3,
+    };
+    const tools = input.useWebSearch
+      ? ([webSearchTool] as unknown as Anthropic.Messages.ToolUnion[])
+      : undefined;
 
-    const text = this.extractText(message);
-    const raw = parseJson<{ title: string; body: string; hashtags: string[] }>(text);
-
-    const imageMap: Record<string, string> = {};
-    input.images.forEach((img, i) => {
-      imageMap[`사진${i + 1}`] = img.filename;
-    });
+    const raw = await withJsonRetry<{ title: string; body: string; hashtags: string[] }>(
+      async () => {
+        const message = await this.client.messages.create({
+          model: MODEL, max_tokens: MAX_TOKENS,
+          system: [{
+            type: "text",
+            text: buildGenerateSystemPrompt(profile),
+            cache_control: { type: "ephemeral" },
+          }],
+          messages: [{ role: "user", content }],
+          ...(tools ? { tools } : {}),
+        });
+        return this.extractText(message);
+      },
+      "Claude",
+    );
 
     return {
       title: raw.title,
       body: raw.body,
-      hashtags: raw.hashtags.map((h) => h.replace(/^#/, "").trim()).filter(Boolean),
-      imageMap,
+      hashtags: cleanHashtags(raw.hashtags),
+      imageMap: buildImageMap(input.images),
     };
   }
 

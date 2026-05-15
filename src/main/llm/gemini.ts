@@ -7,18 +7,9 @@ import {
   buildAnalyzeSystemPrompt, buildAnalyzeUserPrompt,
   buildGenerateSystemPrompt, buildGenerateUserPrompt,
 } from "./prompts";
+import { buildImageMap, cleanHashtags, withJsonRetry } from "./utils";
 
 const MODEL_NAME = "gemini-2.5-flash";
-const FENCE_RE = /^```(?:json)?\s*|\s*```$/gm;
-
-function parseJson<T>(text: string): T {
-  const cleaned = text.replace(FENCE_RE, "").trim();
-  try {
-    return JSON.parse(cleaned) as T;
-  } catch (e) {
-    throw new Error(`Gemini JSON 파싱 실패: ${(e as Error).message}\n원문: ${text.slice(0, 300)}`);
-  }
-}
 
 export class GeminiProvider implements LLMProvider {
   readonly name = "gemini" as const;
@@ -36,8 +27,15 @@ export class GeminiProvider implements LLMProvider {
         generationConfig: { maxOutputTokens: 8 },
       });
       return true;
-    } catch {
-      return false;
+    } catch (e) {
+      const status = (e as { status?: number })?.status;
+      const msg = (e as { message?: string })?.message ?? "";
+      if (status === 401 || status === 403 || /PERMISSION_DENIED|API key/i.test(msg)) {
+        return false;
+      }
+      // Non-auth error: log and re-throw.
+      console.error("[GeminiProvider.validateApiKey] non-auth error:", e);
+      throw e;
     }
   }
 
@@ -47,10 +45,12 @@ export class GeminiProvider implements LLMProvider {
       systemInstruction: buildAnalyzeSystemPrompt(),
       generationConfig: { responseMimeType: "application/json" },
     });
-    const res = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: buildAnalyzeUserPrompt(samples) }] }],
-    });
-    return parseJson<StyleProfileCore>(res.response.text());
+    return withJsonRetry<StyleProfileCore>(async () => {
+      const res = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: buildAnalyzeUserPrompt(samples) }] }],
+      });
+      return res.response.text();
+    }, "Gemini");
   }
 
   async generatePost(args: {
@@ -59,10 +59,23 @@ export class GeminiProvider implements LLMProvider {
     imageMarkers: string[];
   }): Promise<GenerationResult> {
     const { profile, input, imageMarkers } = args;
+
+    // Gemini grounding via googleSearchRetrieval is generally incompatible
+    // with responseMimeType: "application/json". When web search is on, we
+    // drop the JSON mime type and rely on the system prompt to enforce JSON.
+    const tools = input.useWebSearch
+      ? ([{ googleSearchRetrieval: {} }] as unknown as Parameters<
+          GoogleGenerativeAI["getGenerativeModel"]
+        >[0]["tools"])
+      : undefined;
+
     const model = this.client.getGenerativeModel({
       model: MODEL_NAME,
       systemInstruction: buildGenerateSystemPrompt(profile),
-      generationConfig: { responseMimeType: "application/json" },
+      generationConfig: input.useWebSearch
+        ? {}
+        : { responseMimeType: "application/json" },
+      ...(tools ? { tools } : {}),
     });
 
     const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
@@ -71,23 +84,19 @@ export class GeminiProvider implements LLMProvider {
     }
     parts.push({ text: buildGenerateUserPrompt(input, imageMarkers) });
 
-    const res = await model.generateContent({
-      contents: [{ role: "user", parts }],
-    });
-    const raw = parseJson<{ title: string; body: string; hashtags: string[] }>(
-      res.response.text(),
+    const raw = await withJsonRetry<{ title: string; body: string; hashtags: string[] }>(
+      async () => {
+        const res = await model.generateContent({ contents: [{ role: "user", parts }] });
+        return res.response.text();
+      },
+      "Gemini",
     );
-
-    const imageMap: Record<string, string> = {};
-    input.images.forEach((img, i) => {
-      imageMap[`사진${i + 1}`] = img.filename;
-    });
 
     return {
       title: raw.title,
       body: raw.body,
-      hashtags: raw.hashtags.map((h) => h.replace(/^#/, "").trim()).filter(Boolean),
-      imageMap,
+      hashtags: cleanHashtags(raw.hashtags),
+      imageMap: buildImageMap(input.images),
     };
   }
 }
