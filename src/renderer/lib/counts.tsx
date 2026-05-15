@@ -32,7 +32,7 @@ export function CountsProvider({ children }: { children: React.ReactNode }) {
       setHistory(h.length);
       setSettings(st);
     } catch (e) {
-      // ignore – api may not be ready yet
+      console.warn("AppState refresh failed", e);
     }
   }, []);
 
