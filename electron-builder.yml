@@ -1,0 +1,19 @@
+appId: com.naver-blog-writer.app
+productName: 네이버 블로그 작성기
+directories:
+  output: release
+files:
+  - out/**/*
+  - package.json
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
+  identity: null
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
