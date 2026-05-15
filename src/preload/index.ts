@@ -27,6 +27,10 @@ const api: AppApi = {
     onProgress: (cb) => on("style:progress", (stage) => cb(stage as string)),
     onWarning: (cb) => on("style:warning", (msg) => cb(msg as string)),
   },
+  images: {
+    prepare: (filename, data) =>
+      ipcRenderer.invoke("images:prepare", filename, Array.from(data)),
+  },
   generate: {
     run: (input) => ipcRenderer.invoke("generate:run", input),
     onProgress: (cb) => on("generate:progress", (stage) => cb(stage as string)),

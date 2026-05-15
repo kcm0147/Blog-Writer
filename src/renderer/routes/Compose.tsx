@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { fileToImageInput } from "../lib/readImage";
 import type {
   GenerateInput, ImageInput, PostType, StyleProfile, Tone,
 } from "@shared/types";
@@ -29,13 +28,17 @@ export default function Compose() {
   const [emphasis, setEmphasis] = useState("");
   const [memo, setMemo] = useState("");
   const [images, setImages] = useState<ImageInput[]>([]);
+  const [useWebSearchSetting, setUseWebSearchSetting] = useState(false);
 
   const [outcome, setOutcome] = useState<GenerateOutcome | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { void api.style.getProfile().then(setProfile); }, []);
+  useEffect(() => {
+    void api.style.getProfile().then(setProfile);
+    void api.settings.get().then((s) => setUseWebSearchSetting(s.useWebSearch));
+  }, []);
   useEffect(() => {
     const off = api.generate.onProgress(setProgress);
     return () => off();
@@ -47,7 +50,9 @@ export default function Compose() {
     const remaining = 10 - images.length;
     for (let i = 0; i < Math.min(files.length, remaining); i++) {
       const f = files[i];
-      if (f) inputs.push(await fileToImageInput(f));
+      if (!f) continue;
+      const buf = await f.arrayBuffer();
+      inputs.push(await api.images.prepare(f.name, new Uint8Array(buf)));
     }
     setImages((prev) => [...prev, ...inputs].slice(0, 10));
   };
@@ -78,7 +83,7 @@ export default function Compose() {
       },
       memo: memo.trim(),
       images,
-      useWebSearch: false,
+      useWebSearch: useWebSearchSetting,
     };
     try {
       setOutcome(await api.generate.run(input));

@@ -1,5 +1,5 @@
 import type {
-  GenerateInput, HistoryRecord, Provider, Sample,
+  GenerateInput, HistoryRecord, ImageInput, Provider, Sample,
   SettingsWithKeyStatus, StyleProfile,
 } from "./types";
 import type { GenerateOutcome } from "./generate-outcome";
@@ -25,6 +25,9 @@ export interface AppApi {
     analyze(): Promise<StyleProfile>;
     onProgress(cb: (stage: string) => void): () => void;
     onWarning(cb: (msg: string) => void): () => void;
+  };
+  images: {
+    prepare(filename: string, data: Uint8Array): Promise<ImageInput>;
   };
   generate: {
     run(input: GenerateInput): Promise<GenerateOutcome>;

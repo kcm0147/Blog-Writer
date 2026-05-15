@@ -81,7 +81,14 @@ export default function Settings() {
       <section className="space-y-2">
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={s.useWebSearch}
-            onChange={(e) => api.settings.setWebSearch(e.target.checked).then(refresh)} />
+            onChange={async (e) => {
+              try {
+                await api.settings.setWebSearch(e.target.checked);
+              } catch (err) {
+                console.error("setWebSearch failed", err);
+              }
+              await refresh();
+            }} />
           <span>웹 검색 사용 (최신 매장 정보 자동 조회)</span>
         </label>
       </section>
