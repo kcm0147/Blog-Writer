@@ -6,6 +6,11 @@ export default defineConfig({
     environment: "happy-dom",
     globals: true,
     setupFiles: ["./tests/setup.ts"],
+    server: {
+      deps: {
+        inline: ["electron-store", "conf"],
+      },
+    },
   },
   resolve: {
     alias: {
