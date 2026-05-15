@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import {
   IconCompose, IconBook, IconHistory, IconSettings,
 } from "./lib/icons";
 import { useCounts } from "./lib/counts";
-import { api } from "./api";
-import type { Provider, SettingsWithKeyStatus } from "@shared/types";
+import type { Provider } from "@shared/types";
 
 interface TitlebarSpec {
   crumbs: React.ReactNode;
@@ -31,15 +29,8 @@ function providerLabel(p: Provider) {
 
 export default function Layout() {
   const loc = useLocation();
-  const { samples, history } = useCounts();
+  const { samples, history, settings } = useCounts();
   const { active, crumbs } = titlebarFor(loc.pathname);
-
-  const [settings, setSettings] = useState<SettingsWithKeyStatus | null>(null);
-  useEffect(() => {
-    const load = () => api.settings.get().then(setSettings).catch(() => {});
-    void load();
-    // re-check key status whenever route changes (e.g., after editing in Settings)
-  }, [loc.pathname]);
 
   const hasKey = settings ? settings.hasApiKey[settings.provider] : false;
   const providerName = settings ? providerLabel(settings.provider) : "Claude";
