@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useCounts } from "../lib/counts";
 import { IconDots, IconPlus, IconSearch, IconSpark } from "../lib/icons";
@@ -19,30 +19,43 @@ export default function MyStyle() {
   const [search, setSearch] = useState("");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
-  const refresh = async () => {
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const refresh = useCallback(async () => {
     const [s, p] = await Promise.all([api.samples.list(), api.style.getProfile()]);
+    if (!mountedRef.current) return;
     setSamples(s);
     setProfile(p);
     void refreshCounts();
-  };
+  }, [refreshCounts]);
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   useEffect(() => {
-    const off1 = api.style.onProgress(setProgress);
-    const off2 = api.style.onWarning((w) => setWarnings((prev) => [...prev, w]));
+    const off1 = api.style.onProgress((p) => {
+      if (mountedRef.current) setProgress(p);
+    });
+    const off2 = api.style.onWarning((w) => {
+      if (mountedRef.current) setWarnings((prev) => [...prev, w]);
+    });
     return () => { off1(); off2(); };
   }, []);
 
   const add = async () => {
     if (!body.trim()) return;
     await api.samples.add({ label: label.trim() || "(이름 없음)", body });
+    if (!mountedRef.current) return;
     setLabel(""); setBody(""); setShowAdd(false);
     await refresh();
   };
 
   const remove = async (id: string) => {
     await api.samples.delete(id);
+    if (!mountedRef.current) return;
     setMenuOpenId(null);
     await refresh();
   };
@@ -51,16 +64,20 @@ export default function MyStyle() {
     setAnalyzing(true); setWarnings([]); setAnalysisError(null); setProgress("시작");
     try {
       await api.style.analyze();
+      if (!mountedRef.current) return;
       await refresh();
     } catch (e) {
+      if (!mountedRef.current) return;
       setAnalysisError((e as Error).message);
     } finally {
-      setAnalyzing(false); setProgress(null);
+      if (mountedRef.current) {
+        setAnalyzing(false); setProgress(null);
+      }
     }
   };
 
-  const filtered = samples.filter((s) =>
-    !search || s.label.toLowerCase().includes(search.toLowerCase()),
+  const filtered = samples.filter((sample) =>
+    !search || sample.label.toLowerCase().includes(search.toLowerCase()),
   );
 
   const totalChars = samples.reduce((sum, s) => sum + s.charCount, 0);

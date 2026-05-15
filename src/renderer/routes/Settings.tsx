@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useCounts } from "../lib/counts";
 import {
@@ -13,12 +13,19 @@ export default function Settings() {
   const [tab, setTab] = useState<Tab>("ai");
   const [s, setS] = useState<SettingsWithKeyStatus | null>(null);
 
-  const refresh = async () => {
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const refresh = useCallback(async () => {
     const next = await api.settings.get();
+    if (!mountedRef.current) return;
     setS(next);
     void refreshAppState();
-  };
-  useEffect(() => { void refresh(); }, []);
+  }, [refreshAppState]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   if (!s) {
     return (
@@ -75,8 +82,15 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
     state: "idle" | "checking" | "ok" | "fail"; ms?: number; msg?: string;
   }>({ state: "idle" });
 
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const onChangeProvider = async (p: Provider) => {
     await api.settings.setProvider(p);
+    if (!mountedRef.current) return;
     setKeyInput("");
     setValidateState({ state: "idle" });
     await refresh();
@@ -85,6 +99,7 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
   const onSaveKey = async () => {
     if (!keyInput.trim()) return;
     await api.settings.setApiKey(s.provider, keyInput.trim());
+    if (!mountedRef.current) return;
     setKeyInput("");
     setValidateState({ state: "idle" });
     await refresh();
@@ -92,6 +107,7 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
 
   const onClearKey = async () => {
     await api.settings.clearApiKey(s.provider);
+    if (!mountedRef.current) return;
     setValidateState({ state: "idle" });
     await refresh();
   };
@@ -101,17 +117,20 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
     const start = Date.now();
     try {
       const res = await api.settings.validateApiKey(s.provider);
+      if (!mountedRef.current) return;
       const ms = Date.now() - start;
       setValidateState(res.ok
         ? { state: "ok", ms }
         : { state: "fail", ms, msg: res.message ?? "키가 유효하지 않아요" });
     } catch (e) {
+      if (!mountedRef.current) return;
       setValidateState({ state: "fail", ms: Date.now() - start, msg: (e as Error).message });
     }
   };
 
   const setWebSearch = async (on: boolean) => {
     try { await api.settings.setWebSearch(on); } catch (e) { console.error(e); }
+    if (!mountedRef.current) return;
     await refresh();
   };
 
