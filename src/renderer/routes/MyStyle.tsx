@@ -11,6 +11,7 @@ export default function MyStyle() {
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const [showAdd, setShowAdd] = useState(false);
   const [label, setLabel] = useState("");
@@ -47,12 +48,12 @@ export default function MyStyle() {
   };
 
   const analyze = async () => {
-    setAnalyzing(true); setWarnings([]); setProgress("시작");
+    setAnalyzing(true); setWarnings([]); setAnalysisError(null); setProgress("시작");
     try {
       await api.style.analyze();
       await refresh();
     } catch (e) {
-      setWarnings([(e as Error).message]);
+      setAnalysisError((e as Error).message);
     } finally {
       setAnalyzing(false); setProgress(null);
     }
@@ -174,6 +175,11 @@ export default function MyStyle() {
               {warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           </div>
+        </div>
+      )}
+      {analysisError && (
+        <div className="field-msg field-msg--error" style={{ margin: "0 var(--s-6) var(--s-6)" }}>
+          <span className="field-msg__icon">!</span> 스타일 분석 실패: {analysisError}
         </div>
       )}
 
