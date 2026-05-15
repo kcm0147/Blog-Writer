@@ -1,26 +1,21 @@
 import { app, BrowserWindow } from "electron";
 import { join } from "path";
+import { registerIpc } from "./ipc";
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: 1280, height: 800,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: false,
     },
   });
-
-  if (process.env.ELECTRON_RENDERER_URL) {
-    win.loadURL(process.env.ELECTRON_RENDERER_URL);
-  } else {
-    win.loadFile(join(__dirname, "../renderer/index.html"));
-  }
+  if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL);
+  else win.loadFile(join(__dirname, "../renderer/index.html"));
 }
 
 app.whenReady().then(() => {
+  registerIpc();
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
