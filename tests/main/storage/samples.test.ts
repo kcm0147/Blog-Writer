@@ -15,7 +15,7 @@ describe("samples", () => {
     expect(s.charCount).toBe(2);
     const all = listSamples(db);
     expect(all).toHaveLength(1);
-    expect(all[0].id).toBe(s.id);
+    expect(all[0]!.id).toBe(s.id);
   });
 
   it("list returns samples newest-first", async () => {
