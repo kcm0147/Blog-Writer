@@ -54,7 +54,7 @@ function missingCount(m: MissingFields): number {
 
 export default function Compose() {
   const { refresh: refreshCounts, samples, settings } = useCounts();
-  const [profile, setProfile] = useState<StyleProfile | null>(null);
+  const [profile, setProfile] = useState<StyleProfile | null | undefined>(undefined);
   const hasApiKey: boolean | null = settings
     ? settings.hasApiKey[settings.provider]
     : null;
@@ -85,9 +85,13 @@ export default function Compose() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mountedRef = useRef(true);
+  const photoNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
+  }, []);
+  useEffect(() => () => {
+    if (photoNoticeTimerRef.current) clearTimeout(photoNoticeTimerRef.current);
   }, []);
 
   useEffect(() => {
@@ -118,7 +122,8 @@ export default function Compose() {
     if (files.length > remaining) {
       const excess = files.length - remaining;
       setPhotoNotice(`사진은 최대 10장까지만 첨부할 수 있어요. ${excess}장은 제외됐습니다.`);
-      window.setTimeout(() => {
+      if (photoNoticeTimerRef.current) clearTimeout(photoNoticeTimerRef.current);
+      photoNoticeTimerRef.current = setTimeout(() => {
         if (mountedRef.current) setPhotoNotice(null);
       }, 5000);
     }
@@ -211,11 +216,12 @@ export default function Compose() {
   }, []);
 
   // Profile / API key gating
+  const profileLoading = profile === undefined;
   const noProfile = profile === null;
   const noKey = hasApiKey !== true;
 
   // --- Footer ---
-  const submitDisabled = phase === "loading" || noProfile || noKey;
+  const submitDisabled = phase === "loading" || profileLoading || noProfile || noKey;
 
   return (
     <div className="compose">
@@ -226,7 +232,7 @@ export default function Compose() {
           <p className="compose__sub">방문한 곳의 정보와 사진, 메모를 넣어주세요.</p>
         </header>
 
-        {noProfile && (
+        {!profileLoading && noProfile && (
           <div className="validation-banner">
             <div className="validation-banner__icon">!</div>
             <div className="validation-banner__body">
@@ -238,7 +244,7 @@ export default function Compose() {
           </div>
         )}
 
-        {noKey && !noProfile && (
+        {!profileLoading && noKey && !noProfile && (
           <div className="validation-banner">
             <div className="validation-banner__icon">!</div>
             <div className="validation-banner__body">
