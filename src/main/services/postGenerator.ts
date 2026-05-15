@@ -1,6 +1,6 @@
 import type { Database } from "better-sqlite3";
 import type { LLMProvider } from "@main/llm/types";
-import { loadProfile } from "@main/storage/styleProfile";
+import { loadProfile, loadProfileIfFresh } from "@main/storage/styleProfile";
 import { saveGeneration } from "@main/storage/history";
 import type { GenerateInput, GenerationResult } from "@shared/types";
 import type { GenerateOutcome } from "@shared/generate-outcome";
@@ -15,8 +15,11 @@ export async function runGenerate(
   input: GenerateInput,
   opts: { onProgress?: (stage: string) => void } = {},
 ): Promise<GenerateOutcome> {
-  const profile = loadProfile(db);
+  const profile = loadProfileIfFresh(db);
   if (!profile) {
+    if (loadProfile(db)) {
+      throw new Error("샘플이 변경되었습니다. 내 스타일에서 다시 분석해주세요.");
+    }
     throw new Error("스타일 프로파일이 없습니다. 먼저 분석을 실행해주세요.");
   }
 
