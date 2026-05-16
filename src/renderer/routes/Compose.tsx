@@ -77,7 +77,11 @@ function baseStyleFromFormatting(f: StyleFormatting | undefined): string {
   return parts.join(";");
 }
 
-function buildStyledHtml(body: string, profile: StyleProfile | null): string {
+function buildStyledHtml(
+  body: string,
+  profile: StyleProfile | null,
+  images: ImageInput[] = [],
+): string {
   const formatting = profile?.formatting;
   const align = formatting?.paragraphAlign ?? "left";
   const color = formatting?.primaryColor ?? "";
@@ -104,7 +108,26 @@ function buildStyledHtml(body: string, profile: StyleProfile | null): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/\n/g, "<br>");
-      return `<p style="${styles}">${safe}</p>`;
+      const withInlineImages = safe.replace(
+        /\[사진(\d+)\]/g,
+        (match, n: string) => {
+          const idx = Number(n) - 1;
+          const img = images[idx];
+          if (!img) return match;
+          return (
+            `<span style="display:block;margin:8px 0;">` +
+            `<span style="display:inline-block;font-size:11px;font-weight:700;` +
+            `background:#fff;color:#ff5b2e;border:1px solid #ffd9c9;` +
+            `padding:2px 8px;border-radius:999px;margin-bottom:4px;">${match}</span><br>` +
+            `<img src="data:${img.mediaType};base64,${img.base64}" ` +
+            `alt="${match}" ` +
+            `style="max-width:280px;max-height:280px;display:block;` +
+            `border-radius:8px;border:1px solid #eee;" />` +
+            `</span>`
+          );
+        },
+      );
+      return `<p style="${styles}">${withInlineImages}</p>`;
     })
     .join("");
 }
@@ -556,7 +579,7 @@ export default function Compose() {
         {phase === "loading" && <LoadingResult stage={progressStage} photoCount={images.length} />}
         {phase === "result" && outcome && (
           <ResultView outcome={outcome} onSetOutcome={setOutcome} onReset={onReset}
-            profile={profile ?? null} />
+            profile={profile ?? null} images={images} />
         )}
         {phase === "error" && (
           <ErrorView message={errorMessage ?? ""} onRetry={onSubmit} />
@@ -810,12 +833,13 @@ function LoadingResult({ stage, photoCount }: { stage: string | null; photoCount
 }
 
 function ResultView({
-  outcome, onSetOutcome, onReset, profile,
+  outcome, onSetOutcome, onReset, profile, images,
 }: {
   outcome: GenerateOutcome;
   onSetOutcome: (o: GenerateOutcome) => void;
   onReset: () => void;
   profile: StyleProfile | null;
+  images: ImageInput[];
 }) {
   const r = outcome.result;
   const bodyChars = r.body.length;
@@ -827,6 +851,7 @@ function ResultView({
     navigator.clipboard.writeText(md);
   };
   const copyStyled = async () => {
+    // Clipboard copy keeps marker text only — user re-uploads photos in Naver editor.
     const html = buildStyledHtml(r.body, profile);
     try {
       const ClipItem = (globalThis as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
@@ -916,7 +941,7 @@ function ResultView({
         ) : (
           <iframe
             title="서식 미리보기"
-            srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body { margin: 0; padding: 16px; ${baseStyleFromFormatting(profile?.formatting)} } p { margin: 0 0 1em; }</style></head><body>${buildStyledHtml(r.body, profile)}</body></html>`}
+            srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body { margin: 0; padding: 16px; ${baseStyleFromFormatting(profile?.formatting)} } p { margin: 0 0 1em; } img { max-width: 100%; height: auto; }</style></head><body>${buildStyledHtml(r.body, profile, images)}</body></html>`}
             sandbox=""
             style={{ width: "100%", minHeight: "400px", border: "1px solid var(--border-1)", borderRadius: "var(--r-md)", background: "#fff" }}
           />
