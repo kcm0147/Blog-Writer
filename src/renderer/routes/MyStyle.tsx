@@ -4,6 +4,13 @@ import { useCounts } from "../lib/counts";
 import { IconDots, IconPlus, IconSearch, IconSpark } from "../lib/icons";
 import type { Sample, StyleProfile } from "@shared/types";
 
+const STEP_LABELS: Record<string, string> = {
+  "step:samples_loaded": "[1/4] 샘플 글 로드 완료",
+  "step:llm_done": "[2/4] AI 분석 응답 받음",
+  "step:formatting_done": "[3/4] 서식 정보 추출 완료",
+  "step:saved": "[4/4] 프로파일 저장 완료",
+};
+
 export default function MyStyle() {
   const { refresh: refreshCounts } = useCounts();
   const [samples, setSamples] = useState<Sample[]>([]);
@@ -51,7 +58,7 @@ export default function MyStyle() {
 
   useEffect(() => {
     const off1 = api.style.onProgress((p) => {
-      if (mountedRef.current) setProgress(p);
+      if (mountedRef.current) setProgress(STEP_LABELS[p] ?? p);
     });
     const off2 = api.style.onWarning((w) => {
       if (mountedRef.current) setWarnings((prev) => [...prev, w]);
@@ -86,7 +93,8 @@ export default function MyStyle() {
   };
 
   const analyze = async () => {
-    setAnalyzing(true); setWarnings([]); setAnalysisError(null); setProgress("시작");
+    setAnalyzing(true); setWarnings([]); setAnalysisError(null);
+    setProgress("[0/4] AI에 분석 요청 중...");
     try {
       await api.style.analyze();
       if (!mountedRef.current) return;

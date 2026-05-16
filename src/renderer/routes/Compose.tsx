@@ -29,6 +29,20 @@ const TONES: { value: Tone; label: string }[] = [
 
 const MIN_MEMO_CHARS = 50;
 
+const GENERATE_STEP_LABELS: Record<string, string> = {
+  "step:provider_call": "AI 호출 중",
+  "step:validating": "결과 검증 중",
+  "step:saving": "저장 중",
+  "step:done": "완료",
+};
+
+const GENERATE_STEP_INDEX: Record<string, number> = {
+  "step:provider_call": 2,
+  "step:validating": 3,
+  "step:saving": 3,
+  "step:done": 4,
+};
+
 interface MissingFields {
   storeName: boolean;
   address: boolean;
@@ -737,12 +751,21 @@ function LoadingResult({ stage, photoCount }: { stage: string | null; photoCount
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  // Bump if real stage hints at later step
+  // Bump based on real backend step identifiers, fallback to legacy heuristics
   useEffect(() => {
     if (!stage) return;
+    const mapped = GENERATE_STEP_INDEX[stage];
+    if (mapped !== undefined) {
+      setActiveIdx((prev) => Math.max(prev, mapped));
+      return;
+    }
     if (/완료|마무리|해시태그/.test(stage)) setActiveIdx((prev) => Math.max(prev, 3));
     else if (/작성|본문|생성/.test(stage)) setActiveIdx((prev) => Math.max(prev, 2));
   }, [stage]);
+
+  const displayStage = stage
+    ? (GENERATE_STEP_LABELS[stage] ?? stage)
+    : "잠시만 기다려주세요";
 
   return (
     <div className="loading">
@@ -758,7 +781,7 @@ function LoadingResult({ stage, photoCount }: { stage: string | null; photoCount
       </div>
 
       <h2 className="loading__title">글을 만들고 있어요</h2>
-      <p className="loading__sub">{stage ?? "잠시만 기다려주세요"} · 창을 닫아도 계속 진행돼요</p>
+      <p className="loading__sub">{displayStage} · 창을 닫아도 계속 진행돼요</p>
 
       <div className="steps">
         {LOADING_STEPS.map((s, i) => {
