@@ -177,11 +177,14 @@ export async function scrapeNaverBlog(
   const fetchBody = deps?.fetchBody ?? fetchPostBody;
   const delayMs = deps?.delayMs ?? 1000;
 
+  console.log(`[scrape] 시작 — blogId=${blogId}, limit=${limit}`);
   const list = await fetchList(blogId, limit);
+  console.log(`[scrape] RSS 글 목록 ${list.length}개 수신`);
   const results: NaverPost[] = [];
 
   for (let i = 0; i < list.length; i++) {
     const p = list[i]!;
+    console.log(`[scrape] (${i + 1}/${list.length}) "${p.title}" 본문 추출 중...`);
     onProgress?.({ total: list.length, done: i, currentTitle: p.title });
     try {
       const { body, bodyHtml } = await fetchBody(blogId, p.postNo);

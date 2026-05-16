@@ -15,6 +15,9 @@ export async function runGenerate(
   input: GenerateInput,
   opts: { onProgress?: (stage: string) => void } = {},
 ): Promise<GenerateOutcome> {
+  console.log(
+    `[generate] 시작 — 매장 "${input.info.storeName}", 사진 ${input.images.length}장`,
+  );
   const profile = loadProfileIfFresh(db);
   if (!profile) {
     if (loadProfile(db)) {
@@ -24,12 +27,21 @@ export async function runGenerate(
   }
 
   const imageMarkers = input.images.map((_, i) => `사진${i + 1}`);
-  opts.onProgress?.("작성 중");
-
+  opts.onProgress?.("step:provider_call");
+  console.log(
+    `[generate] LLM 호출 중 (${provider.name}, webSearch=${input.useWebSearch})...`,
+  );
+  const t0 = Date.now();
   const result = await provider.generatePost({ profile, input, imageMarkers });
+  console.log(
+    `[generate] LLM 응답 — ${Date.now() - t0}ms, body ${result.body.length}자`,
+  );
 
+  opts.onProgress?.("step:validating");
   const warnings = validate(result, imageMarkers, input.info.length);
+  if (warnings.length) console.warn(`[generate] 검증 경고:`, warnings);
 
+  opts.onProgress?.("step:saving");
   const record = saveGeneration(db, {
     storeName: input.info.storeName,
     address: input.info.address || null,
@@ -39,6 +51,8 @@ export async function runGenerate(
     hashtags: result.hashtags,
     imageMap: result.imageMap,
   });
+  console.log(`[generate] 저장 완료 — id=${record.id}`);
+  opts.onProgress?.("step:done");
 
   return { result, record, warnings };
 }
