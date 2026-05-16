@@ -28,7 +28,7 @@ type StoreSchema = {
 
 const DEFAULT_MODELS = {
   claude: "claude-haiku-4-5-20251001",
-  gemini: "gemini-1.5-flash",
+  gemini: "gemini-3.1-flash-lite",
 } as const;
 
 const store = new Store<StoreSchema>({

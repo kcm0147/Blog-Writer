@@ -9,7 +9,7 @@ import {
 } from "./prompts";
 import { buildImageMap, cleanHashtags, withJsonRetry } from "./utils";
 
-const DEFAULT_MODEL = "gemini-1.5-flash";
+const DEFAULT_MODEL = "gemini-3.1-flash-lite";
 
 export class GeminiProvider implements LLMProvider {
   readonly name = "gemini" as const;

@@ -81,15 +81,14 @@ const CLAUDE_PRESETS = [
   "claude-opus-4-5",
 ];
 const GEMINI_PRESETS = [
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
-  "gemini-2.0-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-3-flash",
+  "gemini-3.1-pro-preview",
 ];
 
 function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promise<void> }) {
   const [keyInput, setKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [modelDraft, setModelDraft] = useState("");
   const [validateState, setValidateState] = useState<{
     state: "idle" | "checking" | "ok" | "fail"; ms?: number; msg?: string;
   }>({ state: "idle" });
@@ -149,15 +148,6 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
   const onSelectModel = async (m: string) => {
     try { await api.settings.setModel(s.provider, m); } catch (e) { console.error(e); return; }
     if (!mountedRef.current) return;
-    await refresh();
-  };
-
-  const onApplyCustomModel = async () => {
-    const v = modelDraft.trim();
-    if (!v) return;
-    try { await api.settings.setModel(s.provider, v); } catch (e) { console.error(e); return; }
-    if (!mountedRef.current) return;
-    setModelDraft("");
     await refresh();
   };
 
@@ -295,15 +285,7 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
                 onClick={() => onSelectModel(m)}>{m}</button>
             ))}
           </div>
-          <div style={{ marginTop: "var(--s-2)" }}>
-            <input className="input"
-              placeholder="직접 입력 (예: gemini-2.5-flash, claude-sonnet-4-5)"
-              value={modelDraft}
-              onChange={(e) => setModelDraft(e.target.value)} />
-            <button className="btn btn--secondary btn--sm" style={{ marginTop: 6 }}
-              onClick={onApplyCustomModel} disabled={!modelDraft.trim()}>적용</button>
-          </div>
-          <div className="helper" style={{ marginTop: 6 }}>
+          <div className="helper" style={{ marginTop: "var(--s-2)" }}>
             현재: <b style={{ fontFamily: "var(--font-mono)" }}>{s.models[s.provider]}</b>
           </div>
         </div>
