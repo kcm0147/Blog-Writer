@@ -7,7 +7,7 @@ import {
   IconCheck, IconInfo,
 } from "../lib/icons";
 import type {
-  GenerateInput, ImageInput, PostType, StyleProfile, Tone,
+  GenerateInput, ImageInput, PostType, StyleFormatting, StyleProfile, Tone,
 } from "@shared/types";
 import type { GenerateOutcome } from "@shared/api";
 
@@ -50,6 +50,16 @@ function missingCount(m: MissingFields): number {
   if (m.address) n++;
   if (m.memo.missing || m.memo.short) n++;
   return n;
+}
+
+function baseStyleFromFormatting(f: StyleFormatting | undefined): string {
+  if (!f) return "";
+  const parts: string[] = [];
+  if (f.fontFamily) parts.push(`font-family: '${f.fontFamily}', sans-serif`);
+  if (f.bodyFontSize) parts.push(`font-size: ${f.bodyFontSize}px`);
+  if (f.primaryColor) parts.push(`color: ${f.primaryColor}`);
+  parts.push("line-height: 1.6");
+  return parts.join(";");
 }
 
 function buildStyledHtml(body: string, profile: StyleProfile | null): string {
@@ -785,6 +795,7 @@ function ResultView({
 }) {
   const r = outcome.result;
   const bodyChars = r.body.length;
+  const [resultView, setResultView] = useState<"edit" | "preview">("edit");
   const copyBody = () => navigator.clipboard.writeText(r.body);
   const copyHashtags = () => navigator.clipboard.writeText(r.hashtags.map((h) => `#${h}`).join(" "));
   const copyMarkdown = () => {
@@ -847,18 +858,45 @@ function ResultView({
 
       {/* BODY */}
       <div className="result__body-card">
-        <div className="result__section-title">
-          본문
-          <span className="btn-link">{bodyChars.toLocaleString()}자</span>
+        <div className="result__section-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span>
+            본문
+            <span className="btn-link" style={{ marginLeft: 8 }}>{bodyChars.toLocaleString()}자</span>
+          </span>
+          {hasFormatting && (
+            <div className="seg">
+              <button
+                className={resultView === "edit" ? "is-active" : ""}
+                onClick={() => setResultView("edit")}
+              >
+                편집
+              </button>
+              <button
+                className={resultView === "preview" ? "is-active" : ""}
+                onClick={() => setResultView("preview")}
+              >
+                서식 미리보기
+              </button>
+            </div>
+          )}
         </div>
-        <textarea
-          className="result__body"
-          spellCheck={false}
-          value={r.body}
-          onChange={(e) => onSetOutcome({ ...outcome, result: { ...r, body: e.target.value } })}
-          rows={20}
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", resize: "vertical", fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" }}
-        />
+        {resultView === "edit" ? (
+          <textarea
+            className="result__body"
+            spellCheck={false}
+            value={r.body}
+            onChange={(e) => onSetOutcome({ ...outcome, result: { ...r, body: e.target.value } })}
+            rows={20}
+            style={{ width: "100%", border: "none", outline: "none", background: "transparent", resize: "vertical", fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" }}
+          />
+        ) : (
+          <iframe
+            title="서식 미리보기"
+            srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body { margin: 0; padding: 16px; ${baseStyleFromFormatting(profile?.formatting)} } p { margin: 0 0 1em; }</style></head><body>${buildStyledHtml(r.body, profile)}</body></html>`}
+            sandbox=""
+            style={{ width: "100%", minHeight: "400px", border: "1px solid var(--border-1)", borderRadius: "var(--r-md)", background: "#fff" }}
+          />
+        )}
       </div>
 
       {/* HASHTAGS */}
