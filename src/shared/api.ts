@@ -13,6 +13,7 @@ export interface AppApi {
     setWebSearch(on: boolean): Promise<void>;
     setApiKey(p: Provider, key: string): Promise<void>;
     clearApiKey(p: Provider): Promise<void>;
+    setModel(p: Provider, model: string): Promise<void>;
     validateApiKey(p: Provider): Promise<{ ok: boolean; message?: string }>;
     getDataDir(): Promise<string>;
     setDataDir(newPath: string | null): Promise<{ ok: boolean; moved: boolean }>;

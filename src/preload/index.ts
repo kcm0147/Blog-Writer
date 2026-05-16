@@ -14,6 +14,7 @@ const api: AppApi = {
     setWebSearch: (on) => ipcRenderer.invoke("settings:setWebSearch", on),
     setApiKey: (p, key) => ipcRenderer.invoke("settings:setApiKey", p, key),
     clearApiKey: (p) => ipcRenderer.invoke("settings:clearApiKey", p),
+    setModel: (p, model) => ipcRenderer.invoke("settings:setModel", p, model),
     validateApiKey: (p) => ipcRenderer.invoke("settings:validateApiKey", p),
     getDataDir: () => ipcRenderer.invoke("settings:getDataDir"),
     setDataDir: (newPath) => ipcRenderer.invoke("settings:setDataDir", newPath),

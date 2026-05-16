@@ -75,9 +75,21 @@ function SubnavLink({ active, onClick, icon, children }: {
 
 // ============ AI tab ============
 
+const CLAUDE_PRESETS = [
+  "claude-haiku-4-5-20251001",
+  "claude-sonnet-4-5",
+  "claude-opus-4-5",
+];
+const GEMINI_PRESETS = [
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+  "gemini-2.0-flash",
+];
+
 function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promise<void> }) {
   const [keyInput, setKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
+  const [modelDraft, setModelDraft] = useState("");
   const [validateState, setValidateState] = useState<{
     state: "idle" | "checking" | "ok" | "fail"; ms?: number; msg?: string;
   }>({ state: "idle" });
@@ -131,6 +143,21 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
   const setWebSearch = async (on: boolean) => {
     try { await api.settings.setWebSearch(on); } catch (e) { console.error(e); }
     if (!mountedRef.current) return;
+    await refresh();
+  };
+
+  const onSelectModel = async (m: string) => {
+    try { await api.settings.setModel(s.provider, m); } catch (e) { console.error(e); return; }
+    if (!mountedRef.current) return;
+    await refresh();
+  };
+
+  const onApplyCustomModel = async () => {
+    const v = modelDraft.trim();
+    if (!v) return;
+    try { await api.settings.setModel(s.provider, v); } catch (e) { console.error(e); return; }
+    if (!mountedRef.current) return;
+    setModelDraft("");
     await refresh();
   };
 
@@ -248,6 +275,38 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
             </div>
           </div>
         )}
+      </section>
+
+      {/* 모델 */}
+      <section className="set-card">
+        <header className="set-card__head">
+          <div>
+            <h2 className="set-card__title">모델</h2>
+            <p className="set-card__sub">제공자별 사용할 모델을 선택해주세요.</p>
+          </div>
+        </header>
+
+        <div className="field">
+          <label className="label">{s.provider === "claude" ? "Claude" : "Gemini"} 모델</label>
+          <div className="seg is-full">
+            {(s.provider === "claude" ? CLAUDE_PRESETS : GEMINI_PRESETS).map((m) => (
+              <button key={m}
+                className={s.models[s.provider] === m ? "is-active" : ""}
+                onClick={() => onSelectModel(m)}>{m}</button>
+            ))}
+          </div>
+          <div style={{ marginTop: "var(--s-2)" }}>
+            <input className="input"
+              placeholder="직접 입력 (예: gemini-2.5-flash, claude-sonnet-4-5)"
+              value={modelDraft}
+              onChange={(e) => setModelDraft(e.target.value)} />
+            <button className="btn btn--secondary btn--sm" style={{ marginTop: 6 }}
+              onClick={onApplyCustomModel} disabled={!modelDraft.trim()}>적용</button>
+          </div>
+          <div className="helper" style={{ marginTop: 6 }}>
+            현재: <b style={{ fontFamily: "var(--font-mono)" }}>{s.models[s.provider]}</b>
+          </div>
+        </div>
       </section>
 
       {/* 추가 옵션 */}

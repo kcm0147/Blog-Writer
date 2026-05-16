@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow, dialog } from "electron";
 import {
   getSettings, setProvider, setWebSearch, setApiKey, clearApiKey, getApiKey,
   isValidProvider, getDataDir, setCustomDataDir, cleanupOldDataDir,
+  getModel, setModel,
 } from "./storage/settings";
 import { resolve } from "path";
 import {
@@ -44,12 +45,17 @@ export function registerIpc(): void {
   ipcMain.handle("settings:setWebSearch", (_e, on: boolean) => setWebSearch(on));
   ipcMain.handle("settings:setApiKey", (_e, p: Provider, key: string) => setApiKey(p, key));
   ipcMain.handle("settings:clearApiKey", (_e, p: Provider) => clearApiKey(p));
+  ipcMain.handle("settings:setModel", (_e, p: Provider, model: string) => {
+    if (!isValidProvider(p)) throw new Error(`Invalid provider: ${String(p)}`);
+    setModel(p, model);
+  });
   ipcMain.handle("settings:validateApiKey", async (_e, p: Provider) => {
     if (!isValidProvider(p)) return { ok: false, message: "Invalid provider" };
     const key = getApiKey(p);
     if (!key) return { ok: false, message: "API 키가 등록되어 있지 않습니다." };
     try {
-      const ok = await makeProvider(p, key).validateApiKey();
+      const model = getModel(p);
+      const ok = await makeProvider(p, key, model).validateApiKey();
       return ok
         ? { ok: true }
         : { ok: false, message: "키가 유효하지 않습니다. 다시 확인해주세요." };
@@ -151,7 +157,8 @@ export function registerIpc(): void {
       const { provider } = getSettings();
       if (!isValidProvider(provider)) throw new Error(`Invalid provider: ${String(provider)}`);
       const key = requireApiKey(provider);
-      return await runAnalyze(getDb(), makeProvider(provider, key), {
+      const model = getModel(provider);
+      return await runAnalyze(getDb(), makeProvider(provider, key, model), {
         onProgress: (s) => emitProgress("style:progress", s),
         onWarning: (w) => emitProgress("style:warning", w),
       });
@@ -166,7 +173,8 @@ export function registerIpc(): void {
       const { provider } = getSettings();
       if (!isValidProvider(provider)) throw new Error(`Invalid provider: ${String(provider)}`);
       const key = requireApiKey(provider);
-      return await runGenerate(getDb(), makeProvider(provider, key), input, {
+      const model = getModel(provider);
+      return await runGenerate(getDb(), makeProvider(provider, key, model), input, {
         onProgress: (s) => emitProgress("generate:progress", s),
       });
     } catch (e) {
