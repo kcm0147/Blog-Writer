@@ -9,19 +9,21 @@ import {
 } from "./prompts";
 import { buildImageMap, cleanHashtags, withJsonRetry } from "./utils";
 
-const MODEL_NAME = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-1.5-flash";
 
 export class GeminiProvider implements LLMProvider {
   readonly name = "gemini" as const;
   private client: GoogleGenerativeAI;
+  private model: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, model?: string) {
     this.client = new GoogleGenerativeAI(apiKey);
+    this.model = model || DEFAULT_MODEL;
   }
 
   async validateApiKey(): Promise<boolean> {
     try {
-      const model = this.client.getGenerativeModel({ model: MODEL_NAME });
+      const model = this.client.getGenerativeModel({ model: this.model });
       await model.generateContent({
         contents: [{ role: "user", parts: [{ text: "ping" }] }],
         generationConfig: { maxOutputTokens: 8 },
@@ -40,13 +42,13 @@ export class GeminiProvider implements LLMProvider {
   }
 
   async analyzeStyle(samples: string[]): Promise<StyleProfileCore> {
-    const model = this.client.getGenerativeModel({
-      model: MODEL_NAME,
+    const gm = this.client.getGenerativeModel({
+      model: this.model,
       systemInstruction: buildAnalyzeSystemPrompt(),
       generationConfig: { responseMimeType: "application/json" },
     });
     return withJsonRetry<StyleProfileCore>(async () => {
-      const res = await model.generateContent({
+      const res = await gm.generateContent({
         contents: [{ role: "user", parts: [{ text: buildAnalyzeUserPrompt(samples) }] }],
       });
       return res.response.text();
@@ -69,8 +71,8 @@ export class GeminiProvider implements LLMProvider {
         >[0]["tools"])
       : undefined;
 
-    const model = this.client.getGenerativeModel({
-      model: MODEL_NAME,
+    const gm = this.client.getGenerativeModel({
+      model: this.model,
       systemInstruction: buildGenerateSystemPrompt(profile),
       generationConfig: input.useWebSearch
         ? {}
@@ -86,7 +88,7 @@ export class GeminiProvider implements LLMProvider {
 
     const raw = await withJsonRetry<{ title: string; body: string; hashtags: string[] }>(
       async () => {
-        const res = await model.generateContent({ contents: [{ role: "user", parts }] });
+        const res = await gm.generateContent({ contents: [{ role: "user", parts }] });
         return res.response.text();
       },
       "Gemini",

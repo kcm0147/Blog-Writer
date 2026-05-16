@@ -9,7 +9,7 @@ import {
 } from "./prompts";
 import { buildImageMap, cleanHashtags, withJsonRetry } from "./utils";
 
-const MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS = 4096;
 
 // web_search_20250305 is a server-side tool not yet present in
@@ -23,15 +23,17 @@ type WebSearchTool = {
 export class ClaudeProvider implements LLMProvider {
   readonly name = "claude" as const;
   private client: Anthropic;
+  private model: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, model?: string) {
     this.client = new Anthropic({ apiKey });
+    this.model = model || DEFAULT_MODEL;
   }
 
   async validateApiKey(): Promise<boolean> {
     try {
       await this.client.messages.create({
-        model: MODEL, max_tokens: 8,
+        model: this.model, max_tokens: 8,
         messages: [{ role: "user", content: "ping" }],
       });
       return true;
@@ -48,7 +50,7 @@ export class ClaudeProvider implements LLMProvider {
   async analyzeStyle(samples: string[]): Promise<StyleProfileCore> {
     return withJsonRetry<StyleProfileCore>(async () => {
       const message = await this.client.messages.create({
-        model: MODEL, max_tokens: MAX_TOKENS,
+        model: this.model, max_tokens: MAX_TOKENS,
         system: buildAnalyzeSystemPrompt(),
         messages: [{ role: "user", content: buildAnalyzeUserPrompt(samples) }],
       });
@@ -83,7 +85,7 @@ export class ClaudeProvider implements LLMProvider {
     const raw = await withJsonRetry<{ title: string; body: string; hashtags: string[] }>(
       async () => {
         const message = await this.client.messages.create({
-          model: MODEL, max_tokens: MAX_TOKENS,
+          model: this.model, max_tokens: MAX_TOKENS,
           system: [{
             type: "text",
             text: buildGenerateSystemPrompt(profile),
