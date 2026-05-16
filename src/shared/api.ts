@@ -14,6 +14,11 @@ export interface AppApi {
     setApiKey(p: Provider, key: string): Promise<void>;
     clearApiKey(p: Provider): Promise<void>;
     validateApiKey(p: Provider): Promise<{ ok: boolean; message?: string }>;
+    getDataDir(): Promise<string>;
+    setDataDir(newPath: string | null): Promise<{ ok: boolean; moved: boolean }>;
+  };
+  dialog: {
+    pickFolder(): Promise<string | null>;
   };
   samples: {
     list(): Promise<Sample[]>;

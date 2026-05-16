@@ -15,6 +15,11 @@ const api: AppApi = {
     setApiKey: (p, key) => ipcRenderer.invoke("settings:setApiKey", p, key),
     clearApiKey: (p) => ipcRenderer.invoke("settings:clearApiKey", p),
     validateApiKey: (p) => ipcRenderer.invoke("settings:validateApiKey", p),
+    getDataDir: () => ipcRenderer.invoke("settings:getDataDir"),
+    setDataDir: (newPath) => ipcRenderer.invoke("settings:setDataDir", newPath),
+  },
+  dialog: {
+    pickFolder: () => ipcRenderer.invoke("dialog:pickFolder"),
   },
   samples: {
     list: () => ipcRenderer.invoke("samples:list"),

@@ -1,7 +1,7 @@
-import { ipcMain, BrowserWindow } from "electron";
+import { ipcMain, BrowserWindow, dialog } from "electron";
 import {
   getSettings, setProvider, setWebSearch, setApiKey, clearApiKey, getApiKey,
-  isValidProvider,
+  isValidProvider, getDataDir, setCustomDataDir,
 } from "./storage/settings";
 import {
   addSample, listSamples, deleteSample, updateSample, setSampleHtml,
@@ -13,7 +13,7 @@ import { runAnalyze } from "./services/styleAnalyzer";
 import { runGenerate } from "./services/postGenerator";
 import { makeProvider } from "./llm";
 import { toUserMessage } from "./llm/errors";
-import { getDb } from "./db-singleton";
+import { getDb, reopenDb } from "./db-singleton";
 import { prepareImage } from "./images/load";
 import type { Provider, GenerateInput } from "@shared/types";
 
@@ -48,6 +48,30 @@ export function registerIpc(): void {
       console.error("validateApiKey error", e);
       return { ok: false, message: toUserMessage(e) };
     }
+  });
+
+  ipcMain.handle("settings:getDataDir", () => getDataDir());
+  ipcMain.handle("settings:setDataDir", async (_e, newPath: string | null) => {
+    try {
+      const moved = setCustomDataDir(newPath);
+      reopenDb();
+      return { ok: true, moved: moved.moved };
+    } catch (e) {
+      console.error("settings:setDataDir failed", e);
+      throw new Error((e as Error).message);
+    }
+  });
+
+  ipcMain.handle("dialog:pickFolder", async () => {
+    const win = BrowserWindow.getFocusedWindow()
+      ?? BrowserWindow.getAllWindows()[0];
+    if (!win) return null;
+    const res = await dialog.showOpenDialog(win, {
+      properties: ["openDirectory", "createDirectory"],
+      title: "데이터 저장 폴더 선택",
+    });
+    if (res.canceled || res.filePaths.length === 0) return null;
+    return res.filePaths[0];
   });
 
   ipcMain.handle("images:prepare", (_e, filename: string, data: number[]) =>

@@ -365,23 +365,74 @@ function DefaultsTab() {
   );
 }
 
-// ============ Data tab (mostly informational) ============
+// ============ Data tab ============
 
 function DataTab() {
+  const [dataDir, setDataDir] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    void api.settings.getDataDir().then((d) => {
+      if (mountedRef.current) setDataDir(d);
+    });
+  }, []);
+
+  const onChangeLocation = async () => {
+    const picked = await api.dialog.pickFolder();
+    if (!picked) return;
+    if (picked === dataDir) return;
+    const ok = window.confirm(
+      `데이터를 다음 위치로 이동합니다.\n${picked}\n\n이동 후 변경사항을 반영하려면 앱을 다시 시작해주세요.`,
+    );
+    if (!ok) return;
+    try {
+      await api.settings.setDataDir(picked);
+      if (!mountedRef.current) return;
+      setDataDir(picked);
+      window.alert("이동 완료. 앱을 다시 시작해주세요.");
+    } catch (e) {
+      window.alert((e as Error).message);
+    }
+  };
+
+  const onResetLocation = async () => {
+    if (!window.confirm("데이터를 기본 위치로 되돌립니다. 진행할까요?")) return;
+    try {
+      await api.settings.setDataDir(null);
+      if (!mountedRef.current) return;
+      const next = await api.settings.getDataDir();
+      if (!mountedRef.current) return;
+      setDataDir(next);
+      window.alert("기본 위치로 복귀. 앱을 다시 시작해주세요.");
+    } catch (e) {
+      window.alert((e as Error).message);
+    }
+  };
+
   return (
     <>
       <section className="set-card">
         <header className="set-card__head">
           <div>
             <h2 className="set-card__title">데이터 저장 위치</h2>
-            <p className="set-card__sub">모든 데이터는 이 PC의 사용자 폴더에만 저장돼요.</p>
+            <p className="set-card__sub">DB와 암호화된 API 키가 저장되는 폴더예요. 이동 후 앱을 재시작해주세요.</p>
           </div>
         </header>
         <div className="data-folder">
           <svg className="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
           </svg>
-          <code>~/Library/Application Support/Writelet/</code>
+          <code style={{ fontFamily: "var(--font-mono)" }}>
+            {dataDir ?? "로딩 중…"}
+          </code>
+        </div>
+        <div className="result__actions" style={{ marginTop: "var(--s-3)", justifyContent: "flex-start" }}>
+          <button className="btn btn--secondary" onClick={onChangeLocation}>변경</button>
+          <button className="btn btn--secondary" onClick={onResetLocation}>기본값으로</button>
         </div>
       </section>
 

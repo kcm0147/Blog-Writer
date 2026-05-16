@@ -1,7 +1,10 @@
 import { app, safeStorage } from "electron";
 import Store from "electron-store";
-import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "fs";
-import { join } from "path";
+import {
+  mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync,
+  cpSync, statSync, rmSync, accessSync, constants as fsConstants,
+} from "fs";
+import { isAbsolute, join, resolve } from "path";
 import type { Provider, SettingsWithKeyStatus } from "@shared/types";
 
 const VALID_PROVIDERS: ReadonlySet<Provider> = new Set(["claude", "gemini"]);
@@ -16,14 +19,37 @@ function assertProvider(p: unknown): asserts p is Provider {
   }
 }
 
-type StoreSchema = { provider: Provider; useWebSearch: boolean };
+type StoreSchema = {
+  provider: Provider;
+  useWebSearch: boolean;
+  customDataDir: string | null;
+};
 
 const store = new Store<StoreSchema>({
-  defaults: { provider: "claude", useWebSearch: false },
+  defaults: { provider: "claude", useWebSearch: false, customDataDir: null },
 });
 
+const DB_FILENAME = "naver-blog-writer.db";
+const KEYS_DIRNAME = "keys";
+
+function defaultDataDir(): string {
+  return app.getPath("userData");
+}
+
+export function getDataDir(): string {
+  const custom = store.get("customDataDir");
+  if (typeof custom === "string" && custom.length > 0) {
+    return custom;
+  }
+  return defaultDataDir();
+}
+
+export function getDbPath(): string {
+  return join(getDataDir(), DB_FILENAME);
+}
+
 function keysDir(): string {
-  const dir = join(app.getPath("userData"), "keys");
+  const dir = join(getDataDir(), KEYS_DIRNAME);
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -94,4 +120,82 @@ export function clearApiKey(p: Provider): void {
   assertProvider(p);
   const path = keyPath(p);
   if (existsSync(path)) unlinkSync(path);
+}
+
+// ============ Custom data directory ============
+
+function ensureWritableDirectory(dir: string): void {
+  mkdirSync(dir, { recursive: true });
+  let stat;
+  try {
+    stat = statSync(dir);
+  } catch (e) {
+    throw new Error(`폴더에 접근할 수 없습니다: ${(e as Error).message}`);
+  }
+  if (!stat.isDirectory()) {
+    throw new Error(`경로가 폴더가 아닙니다: ${dir}`);
+  }
+  try {
+    accessSync(dir, fsConstants.W_OK);
+  } catch {
+    throw new Error(`폴더에 쓰기 권한이 없습니다: ${dir}`);
+  }
+}
+
+function copyDataFiles(from: string, to: string): void {
+  const dbFrom = join(from, DB_FILENAME);
+  const dbTo = join(to, DB_FILENAME);
+  if (existsSync(dbFrom)) {
+    cpSync(dbFrom, dbTo, { force: true });
+  }
+  const keysFrom = join(from, KEYS_DIRNAME);
+  const keysTo = join(to, KEYS_DIRNAME);
+  if (existsSync(keysFrom)) {
+    cpSync(keysFrom, keysTo, { recursive: true, force: true });
+  }
+}
+
+function cleanupOldData(dir: string): void {
+  const dbPath = join(dir, DB_FILENAME);
+  if (existsSync(dbPath)) {
+    try { unlinkSync(dbPath); } catch (e) { console.warn("cleanup db failed", e); }
+  }
+  const keysPath = join(dir, KEYS_DIRNAME);
+  if (existsSync(keysPath)) {
+    try { rmSync(keysPath, { recursive: true, force: true }); }
+    catch (e) { console.warn("cleanup keys failed", e); }
+  }
+}
+
+export function setCustomDataDir(newPath: string | null): { moved: boolean } {
+  const currentDir = getDataDir();
+
+  if (newPath === null) {
+    const fallback = defaultDataDir();
+    if (resolve(currentDir) === resolve(fallback)) {
+      store.set("customDataDir", null);
+      return { moved: false };
+    }
+    ensureWritableDirectory(fallback);
+    copyDataFiles(currentDir, fallback);
+    store.set("customDataDir", null);
+    cleanupOldData(currentDir);
+    return { moved: true };
+  }
+
+  if (typeof newPath !== "string" || newPath.length === 0) {
+    throw new Error("경로가 비어 있습니다.");
+  }
+  if (!isAbsolute(newPath)) {
+    throw new Error("절대 경로를 입력해주세요.");
+  }
+  const resolvedNew = resolve(newPath);
+  if (resolve(currentDir) === resolvedNew) {
+    return { moved: false };
+  }
+  ensureWritableDirectory(resolvedNew);
+  copyDataFiles(currentDir, resolvedNew);
+  store.set("customDataDir", resolvedNew);
+  cleanupOldData(currentDir);
+  return { moved: true };
 }
