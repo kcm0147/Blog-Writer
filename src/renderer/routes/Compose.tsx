@@ -162,6 +162,7 @@ export default function Compose() {
   const [outcome, setOutcome] = useState<GenerateOutcome | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+  const [photoLoading, setPhotoLoading] = useState<{ done: number; total: number } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mountedRef = useRef(true);
@@ -207,19 +208,25 @@ export default function Compose() {
         if (mountedRef.current) setPhotoNotice(null);
       }, 5000);
     }
+    const total = Math.min(files.length, remaining);
+    if (total === 0) return;
+    setPhotoLoading({ done: 0, total });
     const next: ImageInput[] = [];
-    for (let i = 0; i < Math.min(files.length, remaining); i++) {
+    for (let i = 0; i < total; i++) {
       const f = files[i];
       if (!f) continue;
       try {
         const buf = await f.arrayBuffer();
-        next.push(await api.images.prepare(f.name, new Uint8Array(buf)));
+        const prepared = await api.images.prepare(f.name, new Uint8Array(buf));
+        next.push(prepared);
+        if (mountedRef.current) setPhotoLoading({ done: i + 1, total });
       } catch (e) {
         console.error("image prepare failed", e);
       }
     }
     if (!mountedRef.current) return;
     setImages((prev) => [...prev, ...next].slice(0, MAX_IMAGES));
+    setPhotoLoading(null);
   };
 
   const removeImage = (i: number) => setImages((prev) => prev.filter((_, j) => j !== i));
@@ -441,6 +448,29 @@ export default function Compose() {
                 target.value = "";
               }} />
           </div>
+
+          {photoLoading && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                fontSize: "var(--text-sm)", color: "var(--text-2)", marginBottom: 6,
+              }}>
+                <span className="loading__visual" style={{ width: 14, height: 14, position: "relative" }}>
+                  <span className="ring" style={{ borderWidth: 1.5 }} />
+                </span>
+                <span>사진 처리 중… <b>{photoLoading.done}/{photoLoading.total}</b></span>
+              </div>
+              <div style={{
+                height: 4, borderRadius: 2, background: "var(--bg-sunken)", overflow: "hidden",
+              }}>
+                <div style={{
+                  width: `${(photoLoading.done / photoLoading.total) * 100}%`,
+                  height: "100%", background: "var(--marker)",
+                  transition: "width 200ms var(--ease)",
+                }} />
+              </div>
+            </div>
+          )}
 
           {images.length > 0 && (
             <div className="thumbs">
