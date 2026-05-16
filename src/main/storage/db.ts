@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS generations (
   image_map TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS sample_html (
+  sample_id TEXT PRIMARY KEY REFERENCES samples(id) ON DELETE CASCADE,
+  body_html TEXT NOT NULL
+);
 `;
 
 export function openDatabase(path: string): DB {

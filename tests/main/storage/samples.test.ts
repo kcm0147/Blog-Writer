@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Database } from "better-sqlite3";
 import { openDatabase } from "@main/storage/db";
-import { addSample, listSamples, deleteSample, getAllBodies } from "@main/storage/samples";
+import {
+  addSample, listSamples, deleteSample, getAllBodies,
+  updateSample, getSample, setSampleHtml, listSampleHtmls,
+} from "@main/storage/samples";
 
 let db: Database;
 beforeEach(() => {
@@ -39,5 +42,29 @@ describe("samples", () => {
     expect(bodies).toHaveLength(2);
     expect(bodies).toContain("글A");
     expect(bodies).toContain("글B");
+  });
+
+  it("updateSample replaces label and body, recalculates charCount", () => {
+    const s = addSample(db, { label: "old", body: "글" });
+    const updated = updateSample(db, { id: s.id, label: "new", body: "더 긴 본문" });
+    expect(updated.label).toBe("new");
+    expect(updated.body).toBe("더 긴 본문");
+    expect(updated.charCount).toBe("더 긴 본문".length);
+    expect(getSample(db, s.id)?.label).toBe("new");
+  });
+
+  it("updateSample with only label leaves body intact", () => {
+    const s = addSample(db, { label: "a", body: "bodybody" });
+    const u = updateSample(db, { id: s.id, label: "b" });
+    expect(u.body).toBe("bodybody");
+    expect(u.label).toBe("b");
+  });
+
+  it("setSampleHtml stores html; listSampleHtmls returns it; FK cascades on delete", () => {
+    const s = addSample(db, { label: "x", body: "본문" });
+    setSampleHtml(db, s.id, "<p>html</p>");
+    expect(listSampleHtmls(db)).toEqual(["<p>html</p>"]);
+    deleteSample(db, s.id);
+    expect(listSampleHtmls(db)).toEqual([]);
   });
 });

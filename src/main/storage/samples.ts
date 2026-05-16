@@ -48,3 +48,55 @@ export function getAllBodies(db: Database): string[] {
     .all() as { body: string }[];
   return rows.map((r) => r.body);
 }
+
+export function getSample(db: Database, id: string): Sample | null {
+  const row = db.prepare("SELECT * FROM samples WHERE id = ?").get(id) as
+    | Row
+    | undefined;
+  return row ? toSample(row) : null;
+}
+
+export function updateSample(
+  db: Database,
+  input: { id: string; label?: string; body?: string },
+): Sample {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (input.label !== undefined) {
+    fields.push("label = ?");
+    values.push(input.label);
+  }
+  if (input.body !== undefined) {
+    fields.push("body = ?", "char_count = ?");
+    values.push(input.body, input.body.length);
+  }
+  if (fields.length > 0) {
+    values.push(input.id);
+    db.prepare(`UPDATE samples SET ${fields.join(", ")} WHERE id = ?`).run(
+      ...values,
+    );
+  }
+  const updated = getSample(db, input.id);
+  if (!updated) throw new Error(`Sample not found: ${input.id}`);
+  return updated;
+}
+
+export function setSampleHtml(
+  db: Database,
+  sampleId: string,
+  bodyHtml: string,
+): void {
+  db.prepare(
+    `INSERT INTO sample_html (sample_id, body_html) VALUES (?, ?)
+     ON CONFLICT(sample_id) DO UPDATE SET body_html = excluded.body_html`,
+  ).run(sampleId, bodyHtml);
+}
+
+export function listSampleHtmls(db: Database): string[] {
+  const rows = db
+    .prepare(
+      "SELECT body_html FROM sample_html WHERE body_html IS NOT NULL AND body_html != ''",
+    )
+    .all() as { body_html: string }[];
+  return rows.map((r) => r.body_html);
+}
