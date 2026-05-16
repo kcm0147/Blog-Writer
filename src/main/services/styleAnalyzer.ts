@@ -1,7 +1,8 @@
 import type { Database } from "better-sqlite3";
 import type { LLMProvider } from "@main/llm/types";
-import { getAllBodies } from "@main/storage/samples";
+import { getAllBodies, listSampleHtmls } from "@main/storage/samples";
 import { saveProfile } from "@main/storage/styleProfile";
+import { extractFormatting } from "@main/llm/formatting";
 import type { StyleProfile } from "@shared/types";
 
 export const MIN_SAMPLES_WARN = 5;
@@ -22,5 +23,7 @@ export async function runAnalyze(
   }
   opts.onProgress?.("분석 중");
   const core = await provider.analyzeStyle(bodies);
-  return saveProfile(db, core);
+  const htmls = listSampleHtmls(db);
+  const formatting = htmls.length > 0 ? extractFormatting(htmls) : undefined;
+  return saveProfile(db, { ...core, formatting });
 }

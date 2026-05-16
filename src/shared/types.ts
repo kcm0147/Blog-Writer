@@ -11,6 +11,15 @@ export interface Sample {
   createdAt: string;
 }
 
+export interface StyleFormatting {
+  fontFamily: string | null;
+  bodyFontSize: number | null;
+  headingFontSize: number | null;
+  paragraphAlign: "left" | "center" | "right" | null;
+  primaryColor: string | null;
+  emphasisColor: string | null;
+}
+
 export interface StyleProfile {
   toneDistribution: Record<string, number>;
   avgSentenceLength: number;
@@ -18,6 +27,7 @@ export interface StyleProfile {
   emojiFrequency: "none" | "low" | "medium" | "high";
   structureNotes: string;
   photoDescriptionStyle: string;
+  formatting?: StyleFormatting;
   sourceHash: string;
   sampleCount: number;
   updatedAt: string;
