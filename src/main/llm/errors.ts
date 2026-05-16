@@ -7,6 +7,19 @@ export function toUserMessage(err: unknown): string {
   const msg = err.message;
   const status = (err as { status?: number }).status;
 
+  // 결제 / 크레딧 부족 (키는 맞지만 잔액 0)
+  if (/credit[\s_-]?balance|insufficient[\s_-]?(credit|funds|quota)|billing|payment/i.test(msg)) {
+    return "API 잔액이 부족합니다. 콘솔(console.anthropic.com 또는 aistudio.google.com)에서 결제 정보를 확인해주세요.";
+  }
+  if (status === 402) {
+    return "API 잔액이 부족합니다. 콘솔에서 결제 정보를 확인해주세요.";
+  }
+
+  // 쿼터 (Gemini free tier 등)
+  if (/quota[\s_-]?exceeded|RESOURCE_EXHAUSTED/i.test(msg)) {
+    return "API 사용량이 한도를 초과했습니다. 콘솔에서 할당량을 확인해주세요.";
+  }
+
   // 인증/권한
   if (status === 401 || status === 403) {
     return "API 키가 유효하지 않거나 권한이 없습니다. 설정에서 키를 확인해주세요.";
