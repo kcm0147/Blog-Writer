@@ -104,7 +104,13 @@ export default function MyStyle() {
         limit: Math.max(1, Math.min(50, importLimit)),
       });
       if (!mountedRef.current) return;
-      setImportResult(`${res.count}개의 글을 가져왔어요.`);
+      if (res.skipped > 0) {
+        setImportResult(
+          `${res.count}개를 새로 가져왔어요. ${res.skipped}개는 이미 등록된 글이라 건너뛰었습니다.`,
+        );
+      } else {
+        setImportResult(`${res.count}개의 글을 가져왔어요.`);
+      }
       setImportInput("");
       await refresh();
     } catch (e) {
@@ -407,6 +413,70 @@ export default function MyStyle() {
               <span className="ana-helper__text">{profile.photoDescriptionStyle}</span>
             </div>
           </article>
+
+          {/* Formatting (font, color, alignment) */}
+          {hasFormattingData(profile) ? (
+            <article className="ana-card ana-card--span-2">
+              <header className="ana-card__head">
+                <h3 className="ana-card__title">감지된 글 스타일 (서식)</h3>
+                <span className="ana-card__hint">네이버 블로그 원문에서 자동 추출</span>
+              </header>
+              <ul style={{
+                listStyle: "none", padding: 0, margin: 0,
+                display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: "var(--s-2)", lineHeight: 1.6,
+              }}>
+                {profile.formatting?.fontFamily && (
+                  <li><span style={{ color: "var(--text-3)" }}>주 폰트</span> · {profile.formatting.fontFamily}</li>
+                )}
+                {profile.formatting?.bodyFontSize && (
+                  <li><span style={{ color: "var(--text-3)" }}>본문 크기</span> · {profile.formatting.bodyFontSize}px</li>
+                )}
+                {profile.formatting?.headingFontSize && (
+                  <li><span style={{ color: "var(--text-3)" }}>제목 크기</span> · {profile.formatting.headingFontSize}px</li>
+                )}
+                {profile.formatting?.paragraphAlign && (
+                  <li><span style={{ color: "var(--text-3)" }}>정렬</span> · {labelAlign(profile.formatting.paragraphAlign)}</li>
+                )}
+                {profile.formatting?.primaryColor && (
+                  <li>
+                    <span style={{ color: "var(--text-3)" }}>주 색상</span> ·{" "}
+                    <span style={{
+                      background: profile.formatting.primaryColor,
+                      display: "inline-block", width: 12, height: 12,
+                      borderRadius: 3, verticalAlign: "middle",
+                      marginRight: 6, border: "1px solid var(--border-1)",
+                    }} />
+                    {profile.formatting.primaryColor}
+                  </li>
+                )}
+                {profile.formatting?.emphasisColor && (
+                  <li>
+                    <span style={{ color: "var(--text-3)" }}>강조 색상</span> ·{" "}
+                    <span style={{
+                      background: profile.formatting.emphasisColor,
+                      display: "inline-block", width: 12, height: 12,
+                      borderRadius: 3, verticalAlign: "middle",
+                      marginRight: 6, border: "1px solid var(--border-1)",
+                    }} />
+                    {profile.formatting.emphasisColor}
+                  </li>
+                )}
+              </ul>
+            </article>
+          ) : (
+            <article className="ana-card ana-card--span-2">
+              <header className="ana-card__head">
+                <h3 className="ana-card__title">감지된 글 스타일 (서식)</h3>
+              </header>
+              <div className="ana-helper" style={{ marginTop: 0 }}>
+                <span className="ana-helper__text">
+                  스타일 정보가 비어있어요. 네이버 블로그에서 가져오기로 글을 등록하면
+                  폰트·색상·정렬을 자동 추출할 수 있어요.
+                </span>
+              </div>
+            </article>
+          )}
         </section>
       )}
 
@@ -507,6 +577,16 @@ function SampleEditModal({
   const [label, setLabel] = useState(sample.label);
   const [body, setBody] = useState(sample.body);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<"preview" | "edit">("preview");
+  const [html, setHtml] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    let alive = true;
+    void api.samples.getHtml(sample.id).then((h) => {
+      if (alive) setHtml(h);
+    });
+    return () => { alive = false; };
+  }, [sample.id]);
 
   const dirty = label !== sample.label || body !== sample.body;
 
@@ -549,24 +629,68 @@ function SampleEditModal({
               onChange={(e) => setLabel(e.target.value)} />
           </div>
 
-          <div className="result__body-card">
-            <div className="result__section-title">
-              본문
-              <span className="btn-link">{body.length.toLocaleString()}자</span>
-            </div>
-            <textarea
-              className="result__body"
-              spellCheck={false}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={18}
-              style={{
-                width: "100%", border: "none", outline: "none",
-                background: "transparent", resize: "vertical",
-                fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit",
-              }}
-            />
+          <div className="seg is-full" role="tablist" style={{ marginBottom: "var(--s-3)" }}>
+            <button
+              className={tab === "preview" ? "is-active" : ""}
+              onClick={() => setTab("preview")}>
+              미리보기
+            </button>
+            <button
+              className={tab === "edit" ? "is-active" : ""}
+              onClick={() => setTab("edit")}>
+              편집
+            </button>
           </div>
+
+          {tab === "preview" ? (
+            <div className="result__body-card">
+              <div className="result__section-title">
+                원본 미리보기
+                {html && <span className="btn-link">서식 포함</span>}
+              </div>
+              {html === undefined ? (
+                <div style={{ padding: "var(--s-3)", color: "var(--text-3)" }}>
+                  불러오는 중…
+                </div>
+              ) : html ? (
+                <iframe
+                  title="원본 미리보기"
+                  srcDoc={html}
+                  sandbox=""
+                  style={{
+                    width: "100%", height: 480,
+                    border: "1px solid var(--border-1)",
+                    borderRadius: "var(--r-md, 8px)",
+                    background: "var(--bg-canvas, #fff)",
+                  }}
+                />
+              ) : (
+                <div style={{ padding: "var(--s-3)", color: "var(--text-3)", lineHeight: 1.5 }}>
+                  원본 HTML이 없습니다. 스크랩으로 가져온 글만 미리보기가 지원돼요.
+                  <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{body}</div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="result__body-card">
+              <div className="result__section-title">
+                본문
+                <span className="btn-link">{body.length.toLocaleString()}자</span>
+              </div>
+              <textarea
+                className="result__body"
+                spellCheck={false}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={18}
+                style={{
+                  width: "100%", border: "none", outline: "none",
+                  background: "transparent", resize: "vertical",
+                  fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit",
+                }}
+              />
+            </div>
+          )}
 
           <div className="result__actions">
             <button className="btn btn--secondary"
@@ -601,4 +725,17 @@ function wordSize(i: number): "xl" | "lg" | "md" | "sm" {
   if (i < 3) return "lg";
   if (i < 6) return "md";
   return "sm";
+}
+
+function hasFormattingData(profile: StyleProfile): boolean {
+  const f = profile.formatting;
+  if (!f) return false;
+  return Boolean(
+    f.fontFamily || f.bodyFontSize || f.headingFontSize ||
+    f.paragraphAlign || f.primaryColor || f.emphasisColor,
+  );
+}
+
+function labelAlign(a: "left" | "center" | "right"): string {
+  return { left: "왼쪽", center: "가운데", right: "오른쪽" }[a];
 }

@@ -92,6 +92,13 @@ export function setSampleHtml(
   ).run(sampleId, bodyHtml);
 }
 
+export function getSampleHtml(db: Database, sampleId: string): string | null {
+  const row = db
+    .prepare("SELECT body_html FROM sample_html WHERE sample_id = ?")
+    .get(sampleId) as { body_html: string } | undefined;
+  return row?.body_html ?? null;
+}
+
 export function listSampleHtmls(db: Database): string[] {
   const rows = db
     .prepare(

@@ -31,6 +31,7 @@ const api: AppApi = {
       on("samples:import-progress", (p) =>
         cb(p as { total: number; done: number; currentTitle?: string }),
       ),
+    getHtml: (id) => ipcRenderer.invoke("samples:getHtml", id),
   },
   style: {
     getProfile: () => ipcRenderer.invoke("style:getProfile"),

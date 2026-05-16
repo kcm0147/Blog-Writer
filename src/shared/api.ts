@@ -27,11 +27,13 @@ export interface AppApi {
     delete(id: string): Promise<void>;
     importFromNaver(input: { input: string; limit: number }): Promise<{
       count: number;
+      skipped: number;
       samples: { id: string; label: string }[];
     }>;
     onImportProgress(
       cb: (p: { total: number; done: number; currentTitle?: string }) => void,
     ): () => void;
+    getHtml(id: string): Promise<string | null>;
   };
   style: {
     getProfile(): Promise<StyleProfile | null>;

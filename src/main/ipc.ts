@@ -5,6 +5,7 @@ import {
 } from "./storage/settings";
 import {
   addSample, listSamples, deleteSample, updateSample, setSampleHtml,
+  getSampleHtml,
 } from "./storage/samples";
 import { scrapeNaverBlog } from "./scrapers/naverBlog";
 import { loadProfile } from "./storage/styleProfile";
@@ -88,6 +89,7 @@ export function registerIpc(): void {
       updateSample(getDb(), input),
   );
   ipcMain.handle("samples:delete", (_e, id: string) => deleteSample(getDb(), id));
+  ipcMain.handle("samples:getHtml", (_e, id: string) => getSampleHtml(getDb(), id));
 
   ipcMain.handle(
     "samples:importFromNaver",
@@ -99,13 +101,20 @@ export function registerIpc(): void {
           }
         });
         const db = getDb();
+        const existing = new Set(listSamples(db).map((s) => s.label));
         const inserted: { id: string; label: string }[] = [];
+        let skipped = 0;
         for (const post of posts) {
+          if (existing.has(post.title)) {
+            skipped++;
+            continue;
+          }
           const s = addSample(db, { label: post.title, body: post.body });
           if (post.bodyHtml) setSampleHtml(db, s.id, post.bodyHtml);
           inserted.push({ id: s.id, label: s.label });
+          existing.add(post.title);
         }
-        return { count: inserted.length, samples: inserted };
+        return { count: inserted.length, skipped, samples: inserted };
       } catch (e) {
         console.error("importFromNaver failed", e);
         throw new Error(toUserMessage(e));
