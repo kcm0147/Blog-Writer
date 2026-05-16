@@ -33,7 +33,10 @@ export default function Layout() {
   const { active, crumbs } = titlebarFor(loc.pathname);
 
   const hasKey = settings ? settings.hasApiKey[settings.provider] : false;
-  const providerName = settings ? providerLabel(settings.provider) : "Claude";
+  const providerName = settings ? providerLabel(settings.provider) : null;
+  const statusText = settings
+    ? `${providerName} · ${hasKey ? "API 연결됨" : "키 없음"}`
+    : "연결 안 됨";
 
   return (
     <div className="app">
@@ -72,7 +75,7 @@ export default function Layout() {
         <div className="footer">
           <div className={"key-dot" + (hasKey ? "" : " key-dot--err")}></div>
           <div className="key-status">
-            <span>{providerName} · {hasKey ? "API 연결됨" : "연결 안 됨"}</span>
+            <span>{statusText}</span>
           </div>
         </div>
       </aside>

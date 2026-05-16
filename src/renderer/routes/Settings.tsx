@@ -23,7 +23,7 @@ export default function Settings() {
     const next = await api.settings.get();
     if (!mountedRef.current) return;
     setS(next);
-    void refreshAppState();
+    await refreshAppState();
   }, [refreshAppState]);
   useEffect(() => { void refresh(); }, [refresh]);
 
