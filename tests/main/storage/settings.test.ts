@@ -23,6 +23,7 @@ vi.mock("electron", () => {
 
 import {
   getSettings, setProvider, setWebSearch, setApiKey, clearApiKey, getApiKey,
+  getModel, setModel,
 } from "@main/storage/settings";
 
 describe("settings", () => {
@@ -32,6 +33,22 @@ describe("settings", () => {
     expect(s.useWebSearch).toBe(false);
     expect(s.hasApiKey.claude).toBe(false);
     expect(s.hasApiKey.gemini).toBe(false);
+    expect(s.models.claude).toBe("claude-haiku-4-5-20251001");
+    expect(s.models.gemini).toBe("gemini-1.5-flash");
+  });
+
+  it("set+get model per provider", () => {
+    setModel("claude", "claude-sonnet-4-5");
+    setModel("gemini", "gemini-2.0-flash");
+    expect(getModel("claude")).toBe("claude-sonnet-4-5");
+    expect(getModel("gemini")).toBe("gemini-2.0-flash");
+    const s = getSettings();
+    expect(s.models.claude).toBe("claude-sonnet-4-5");
+    expect(s.models.gemini).toBe("gemini-2.0-flash");
+  });
+
+  it("setModel rejects empty values", () => {
+    expect(() => setModel("claude", "   ")).toThrow();
   });
 
   it("set+get provider and webSearch", () => {

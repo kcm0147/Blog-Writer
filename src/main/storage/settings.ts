@@ -23,10 +23,21 @@ type StoreSchema = {
   provider: Provider;
   useWebSearch: boolean;
   customDataDir: string | null;
+  models: { claude: string; gemini: string };
 };
 
+const DEFAULT_MODELS = {
+  claude: "claude-haiku-4-5-20251001",
+  gemini: "gemini-1.5-flash",
+} as const;
+
 const store = new Store<StoreSchema>({
-  defaults: { provider: "claude", useWebSearch: false, customDataDir: null },
+  defaults: {
+    provider: "claude",
+    useWebSearch: false,
+    customDataDir: null,
+    models: { ...DEFAULT_MODELS },
+  },
 });
 
 const DB_FILENAME = "naver-blog-writer.db";
@@ -87,7 +98,22 @@ export function getSettings(): SettingsWithKeyStatus {
       claude: maskApiKey(claudeKey),
       gemini: maskApiKey(geminiKey),
     },
+    models: store.get("models") || { ...DEFAULT_MODELS },
   };
+}
+
+export function getModel(p: Provider): string {
+  assertProvider(p);
+  const models = store.get("models") || { ...DEFAULT_MODELS };
+  return models[p] || DEFAULT_MODELS[p];
+}
+
+export function setModel(p: Provider, model: string): void {
+  assertProvider(p);
+  const trimmed = (model ?? "").trim();
+  if (!trimmed) throw new Error("모델 이름이 비어 있습니다.");
+  const current = store.get("models") || { ...DEFAULT_MODELS };
+  store.set("models", { ...current, [p]: trimmed });
 }
 
 export function setProvider(p: Provider): void {
