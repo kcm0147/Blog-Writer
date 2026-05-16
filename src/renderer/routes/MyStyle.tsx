@@ -687,7 +687,10 @@ function SampleEditModal({
                 <iframe
                   title="원본 미리보기"
                   srcDoc={html}
-                  sandbox=""
+                  // allow-same-origin so cross-origin <img> (Naver blogthumb, etc.) load.
+                  // Scripts remain blocked because allow-scripts is not present.
+                  sandbox="allow-same-origin"
+                  referrerPolicy="no-referrer"
                   style={{
                     width: "100%", height: 480,
                     border: "1px solid var(--border-1)",
