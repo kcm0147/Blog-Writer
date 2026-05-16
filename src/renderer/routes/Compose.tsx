@@ -435,7 +435,11 @@ export default function Compose() {
             <div className="dropzone__hint">JPG · PNG · 최대 {MAX_IMAGES}장, 5MB 이상은 자동 리사이즈</div>
             <input ref={fileInputRef} type="file" accept=".jpg,.jpeg,.png"
               multiple style={{ display: "none" }}
-              onChange={(e) => { void onFiles(e.target.files); e.target.value = ""; }} />
+              onChange={async (e) => {
+                const target = e.target;
+                await onFiles(target.files);
+                target.value = "";
+              }} />
           </div>
 
           {images.length > 0 && (
