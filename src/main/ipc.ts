@@ -1,8 +1,9 @@
 import { ipcMain, BrowserWindow, dialog } from "electron";
 import {
   getSettings, setProvider, setWebSearch, setApiKey, clearApiKey, getApiKey,
-  isValidProvider, getDataDir, setCustomDataDir,
+  isValidProvider, getDataDir, setCustomDataDir, cleanupOldDataDir,
 } from "./storage/settings";
+import { resolve } from "path";
 import {
   addSample, listSamples, deleteSample, updateSample, setSampleHtml,
   getSampleHtml,
@@ -30,6 +31,13 @@ function requireApiKey(provider: Provider): string {
   return key;
 }
 
+function requireId(id: unknown, label: string): string {
+  if (typeof id !== "string" || id.trim().length === 0) {
+    throw new Error(`${label} ID가 비어 있습니다.`);
+  }
+  return id;
+}
+
 export function registerIpc(): void {
   ipcMain.handle("settings:get", () => getSettings());
   ipcMain.handle("settings:setProvider", (_e, p: Provider) => setProvider(p));
@@ -54,9 +62,18 @@ export function registerIpc(): void {
   ipcMain.handle("settings:getDataDir", () => getDataDir());
   ipcMain.handle("settings:setDataDir", async (_e, newPath: string | null) => {
     try {
-      const moved = setCustomDataDir(newPath);
+      // 1. Copy data to new dir & flip the pointer in the store.
+      //    Does NOT delete old data yet — the DB connection still holds it.
+      const { moved, oldDir } = setCustomDataDir(newPath);
+      // 2. Close old connection, open against the new path. After this we
+      //    own no file handles in oldDir.
       reopenDb();
-      return { ok: true, moved: moved.moved };
+      // 3. Now it's safe to remove the old data files (only if we actually
+      //    moved to a different directory).
+      if (moved && resolve(oldDir) !== resolve(getDataDir())) {
+        cleanupOldDataDir(oldDir);
+      }
+      return { ok: true, moved };
     } catch (e) {
       console.error("settings:setDataDir failed", e);
       throw new Error((e as Error).message);
@@ -85,11 +102,17 @@ export function registerIpc(): void {
   );
   ipcMain.handle(
     "samples:update",
-    (_e, input: { id: string; label?: string; body?: string }) =>
-      updateSample(getDb(), input),
+    (_e, input: { id: string; label?: string; body?: string }) => {
+      requireId(input?.id, "샘플");
+      return updateSample(getDb(), input);
+    },
   );
-  ipcMain.handle("samples:delete", (_e, id: string) => deleteSample(getDb(), id));
-  ipcMain.handle("samples:getHtml", (_e, id: string) => getSampleHtml(getDb(), id));
+  ipcMain.handle("samples:delete", (_e, id: string) =>
+    deleteSample(getDb(), requireId(id, "샘플")),
+  );
+  ipcMain.handle("samples:getHtml", (_e, id: string) =>
+    getSampleHtml(getDb(), requireId(id, "샘플")),
+  );
 
   ipcMain.handle(
     "samples:importFromNaver",
@@ -153,6 +176,10 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle("history:list", () => listHistory(getDb()));
-  ipcMain.handle("history:get", (_e, id: string) => getHistory(getDb(), id));
-  ipcMain.handle("history:delete", (_e, id: string) => deleteHistory(getDb(), id));
+  ipcMain.handle("history:get", (_e, id: string) =>
+    getHistory(getDb(), requireId(id, "히스토리")),
+  );
+  ipcMain.handle("history:delete", (_e, id: string) =>
+    deleteHistory(getDb(), requireId(id, "히스토리")),
+  );
 }

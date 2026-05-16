@@ -145,17 +145,29 @@ function ensureWritableDirectory(dir: string): void {
 function copyDataFiles(from: string, to: string): void {
   const dbFrom = join(from, DB_FILENAME);
   const dbTo = join(to, DB_FILENAME);
-  if (existsSync(dbFrom)) {
-    cpSync(dbFrom, dbTo, { force: true });
-  }
   const keysFrom = join(from, KEYS_DIRNAME);
   const keysTo = join(to, KEYS_DIRNAME);
-  if (existsSync(keysFrom)) {
-    cpSync(keysFrom, keysTo, { recursive: true, force: true });
+  let dbCopied = false;
+  try {
+    if (existsSync(dbFrom)) {
+      cpSync(dbFrom, dbTo, { force: true });
+      dbCopied = true;
+    }
+    if (existsSync(keysFrom)) {
+      cpSync(keysFrom, keysTo, { recursive: true, force: true });
+    }
+  } catch (e) {
+    // Rollback DB if keys copy fails — avoid leaving a half-migrated target.
+    if (dbCopied && existsSync(dbTo)) {
+      try { unlinkSync(dbTo); } catch (cleanupErr) {
+        console.warn("rollback dbTo failed", cleanupErr);
+      }
+    }
+    throw e;
   }
 }
 
-function cleanupOldData(dir: string): void {
+export function cleanupOldDataDir(dir: string): void {
   const dbPath = join(dir, DB_FILENAME);
   if (existsSync(dbPath)) {
     try { unlinkSync(dbPath); } catch (e) { console.warn("cleanup db failed", e); }
@@ -167,20 +179,27 @@ function cleanupOldData(dir: string): void {
   }
 }
 
-export function setCustomDataDir(newPath: string | null): { moved: boolean } {
+/**
+ * Move data dir. Does NOT delete old data — that must happen *after* the
+ * caller has closed the DB connection on the old path. Returns the previous
+ * directory so callers can pass it to {@link cleanupOldDataDir}.
+ */
+export function setCustomDataDir(newPath: string | null): {
+  moved: boolean;
+  oldDir: string;
+} {
   const currentDir = getDataDir();
 
   if (newPath === null) {
     const fallback = defaultDataDir();
     if (resolve(currentDir) === resolve(fallback)) {
       store.set("customDataDir", null);
-      return { moved: false };
+      return { moved: false, oldDir: currentDir };
     }
     ensureWritableDirectory(fallback);
     copyDataFiles(currentDir, fallback);
     store.set("customDataDir", null);
-    cleanupOldData(currentDir);
-    return { moved: true };
+    return { moved: true, oldDir: currentDir };
   }
 
   if (typeof newPath !== "string" || newPath.length === 0) {
@@ -191,11 +210,10 @@ export function setCustomDataDir(newPath: string | null): { moved: boolean } {
   }
   const resolvedNew = resolve(newPath);
   if (resolve(currentDir) === resolvedNew) {
-    return { moved: false };
+    return { moved: false, oldDir: currentDir };
   }
   ensureWritableDirectory(resolvedNew);
   copyDataFiles(currentDir, resolvedNew);
   store.set("customDataDir", resolvedNew);
-  cleanupOldData(currentDir);
-  return { moved: true };
+  return { moved: true, oldDir: currentDir };
 }

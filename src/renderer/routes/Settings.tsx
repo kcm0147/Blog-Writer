@@ -53,7 +53,7 @@ export default function Settings() {
         <div className="set-content">
           {tab === "ai" && <AITab s={s} refresh={refresh} />}
           {tab === "defaults" && <DefaultsTab />}
-          {tab === "data" && <DataTab />}
+          {tab === "data" && <DataTab refresh={refresh} />}
           {tab === "about" && <AboutTab />}
         </div>
       </div>
@@ -367,7 +367,7 @@ function DefaultsTab() {
 
 // ============ Data tab ============
 
-function DataTab() {
+function DataTab({ refresh }: { refresh: () => Promise<void> }) {
   const [dataDir, setDataDir] = useState<string | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -393,6 +393,8 @@ function DataTab() {
       await api.settings.setDataDir(picked);
       if (!mountedRef.current) return;
       setDataDir(picked);
+      await refresh();
+      if (!mountedRef.current) return;
       window.alert("이동 완료. 앱을 다시 시작해주세요.");
     } catch (e) {
       window.alert((e as Error).message);
@@ -407,6 +409,8 @@ function DataTab() {
       const next = await api.settings.getDataDir();
       if (!mountedRef.current) return;
       setDataDir(next);
+      await refresh();
+      if (!mountedRef.current) return;
       window.alert("기본 위치로 복귀. 앱을 다시 시작해주세요.");
     } catch (e) {
       window.alert((e as Error).message);
