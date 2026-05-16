@@ -21,7 +21,10 @@ export function CountsProvider({ children }: { children: React.ReactNode }) {
   const [history, setHistory] = useState(0);
   const [settings, setSettings] = useState<SettingsWithKeyStatus | null>(null);
   const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const refresh = useCallback(async () => {
     try {

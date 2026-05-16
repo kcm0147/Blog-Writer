@@ -28,6 +28,7 @@ export default function MyStyle() {
     useState<{ total: number; done: number; currentTitle?: string } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<string | null>(null);
+  const [importSkipNotices, setImportSkipNotices] = useState<string[]>([]);
 
   // Sample preview / edit
   const [editing, setEditing] = useState<Sample | null>(null);
@@ -43,7 +44,7 @@ export default function MyStyle() {
     if (!mountedRef.current) return;
     setSamples(s);
     setProfile(p);
-    void refreshCounts();
+    await refreshCounts();
   }, [refreshCounts]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -56,7 +57,15 @@ export default function MyStyle() {
       if (mountedRef.current) setWarnings((prev) => [...prev, w]);
     });
     const off3 = api.samples.onImportProgress((p) => {
-      if (mountedRef.current) setImportProgress(p);
+      if (!mountedRef.current) return;
+      if (p.skippedTitle) {
+        const reason = p.skippedReason === "short_body"
+          ? "본문이 짧아 건너뜀"
+          : "불러오기 실패로 건너뜀";
+        setImportSkipNotices((prev) => [...prev, `${reason}: ${p.skippedTitle}`]);
+        return;
+      }
+      setImportProgress(p);
     });
     return () => { off1(); off2(); off3(); };
   }, []);
@@ -97,6 +106,7 @@ export default function MyStyle() {
     setImporting(true);
     setImportError(null);
     setImportResult(null);
+    setImportSkipNotices([]);
     setImportProgress({ total: 0, done: 0 });
     try {
       const res = await api.samples.importFromNaver({
@@ -214,6 +224,19 @@ export default function MyStyle() {
           {importResult && !importing && (
             <div className="field-msg" style={{ marginTop: 8, color: "var(--success)" }}>
               ✓ {importResult}
+            </div>
+          )}
+          {importSkipNotices.length > 0 && (
+            <div className="validation-banner" style={{ marginTop: 8 }}>
+              <div className="validation-banner__icon">!</div>
+              <div className="validation-banner__body">
+                <div className="validation-banner__title">
+                  건너뛴 글 {importSkipNotices.length}개
+                </div>
+                <ul className="validation-banner__list">
+                  {importSkipNotices.map((m, i) => <li key={i}>{m}</li>)}
+                </ul>
+              </div>
             </div>
           )}
           <div className="result__actions" style={{ marginTop: "var(--s-3)" }}>

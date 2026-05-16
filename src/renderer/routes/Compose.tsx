@@ -227,7 +227,7 @@ export default function Compose() {
       if (!mountedRef.current) return;
       setOutcome(res);
       setPhase("result");
-      void refreshCounts();
+      await refreshCounts();
     } catch (e) {
       if (!mountedRef.current) return;
       setErrorMessage((e as Error).message || "알 수 없는 오류");

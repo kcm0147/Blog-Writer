@@ -28,7 +28,7 @@ export default function History() {
 
   const refresh = async () => {
     setRecords(await api.history.list());
-    void refreshCounts();
+    await refreshCounts();
   };
   useEffect(() => { void refresh(); }, []);
 

@@ -35,8 +35,8 @@ export default function Layout() {
   const hasKey = settings ? settings.hasApiKey[settings.provider] : false;
   const providerName = settings ? providerLabel(settings.provider) : null;
   const statusText = settings
-    ? `${providerName} · ${hasKey ? "API 연결됨" : "키 없음"}`
-    : "연결 안 됨";
+    ? `${providerName} · ${hasKey ? "API 키 저장됨" : "키 없음"}`
+    : "로딩 중…";
 
   return (
     <div className="app">
