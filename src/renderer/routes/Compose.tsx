@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useCounts } from "../lib/counts";
 import {
   IconArrow, IconCopy, IconImage, IconPlus, IconRefresh, IconAlert, IconLock,
-  IconCheck, IconInfo,
+  IconCheck, IconInfo, IconTrash,
 } from "../lib/icons";
 import type {
-  GenerateInput, ImageInput, PostType, StyleFormatting, StyleProfile, Tone,
+  DraftPayload, DraftSummary, GenerateInput, ImageInput, PostType,
+  StyleFormatting, StyleProfile, Tone,
 } from "@shared/types";
 import type { GenerateOutcome } from "@shared/api";
 import { MAX_IMAGES } from "@shared/constants";
@@ -154,6 +156,15 @@ export default function Compose() {
   const [emphasis, setEmphasis] = useState("");
   const [memo, setMemo] = useState("");
   const [images, setImages] = useState<ImageInput[]>([]);
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+
+  // drafts
+  const [drafts, setDrafts] = useState<DraftSummary[]>([]);
+  const [showDraftsModal, setShowDraftsModal] = useState(false);
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
+  const [draftSavingState, setDraftSavingState] = useState<"idle" | "saving" | "error">("idle");
+  const [, forceTick] = useState(0);
 
   // flow state
   const [phase, setPhase] = useState<Phase>("idle");
@@ -231,6 +242,112 @@ export default function Compose() {
 
   const removeImage = (i: number) => setImages((prev) => prev.filter((_, j) => j !== i));
 
+  // --- Photo drag reorder ---
+  const onDragStart = (i: number) => (e: React.DragEvent) => {
+    setDraggedIdx(i);
+    e.dataTransfer.effectAllowed = "move";
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+  const onDrop = (targetIdx: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === targetIdx) {
+      setDraggedIdx(null);
+      return;
+    }
+    const from = draggedIdx;
+    setImages((prev) => {
+      if (from < 0 || from >= prev.length) return prev;
+      const next = prev.slice();
+      const moved = next[from];
+      if (!moved) return prev;
+      next.splice(from, 1);
+      next.splice(targetIdx, 0, moved);
+      return next;
+    });
+    setDraggedIdx(null);
+  };
+  const onDragEnd = () => setDraggedIdx(null);
+
+  // --- Drafts ---
+  const refreshDrafts = useCallback(async () => {
+    const list = await api.drafts.list();
+    if (mountedRef.current) setDrafts(list);
+  }, []);
+
+  useEffect(() => { void refreshDrafts(); }, [refreshDrafts]);
+
+  // Tick once per minute so "방금/N분 전" stays fresh
+  useEffect(() => {
+    if (!draftSavedAt) return;
+    const id = setInterval(() => {
+      if (mountedRef.current) forceTick((n) => n + 1);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [draftSavedAt]);
+
+  const onSaveDraft = async () => {
+    setDraftSavingState("saving");
+    const payload: DraftPayload = {
+      storeName, address, visitDate, postType, postTypeExtra,
+      title, keywords, length, tone, emphasis, memo, images,
+    };
+    const label = storeName.trim() || "(이름 없음)";
+    try {
+      const saved = await api.drafts.save({
+        id: currentDraftId ?? undefined,
+        label,
+        payload,
+      });
+      if (!mountedRef.current) return;
+      setCurrentDraftId(saved.id);
+      setDraftSavedAt(new Date());
+      setDraftSavingState("idle");
+      await refreshDrafts();
+    } catch (e) {
+      console.error("draft save failed", e);
+      if (mountedRef.current) setDraftSavingState("error");
+    }
+  };
+
+  const onLoadDraft = async (id: string) => {
+    const d = await api.drafts.get(id);
+    if (!d || !mountedRef.current) return;
+    const p = d.payload;
+    setStoreName(p.storeName);
+    setAddress(p.address);
+    setVisitDate(p.visitDate);
+    setPostType((p.postType as PostType) || "맛집");
+    setPostTypeExtra(p.postTypeExtra);
+    setTitle(p.title);
+    setKeywords(p.keywords);
+    setKeywordDraft("");
+    setLength(p.length);
+    setTone((p.tone as Tone) || "my_style");
+    setEmphasis(p.emphasis);
+    setMemo(p.memo);
+    setImages(p.images);
+    setCurrentDraftId(d.id);
+    setDraftSavedAt(new Date(d.updatedAt));
+    setShowDraftsModal(false);
+    setShowValidation(false);
+    setPhase("idle");
+    setOutcome(null);
+    setErrorMessage(null);
+  };
+
+  const onDeleteDraft = async (id: string) => {
+    await api.drafts.delete(id);
+    if (!mountedRef.current) return;
+    if (currentDraftId === id) {
+      setCurrentDraftId(null);
+      setDraftSavedAt(null);
+    }
+    await refreshDrafts();
+  };
+
   // --- Keyword chips ---
   const addKeyword = (raw: string) => {
     const v = raw.trim();
@@ -300,6 +417,9 @@ export default function Compose() {
     setLength(1500); setTone("my_style");
     setShowValidation(false); setPhase("idle"); setOutcome(null); setErrorMessage(null);
     setPhotoNotice(null);
+    setCurrentDraftId(null);
+    setDraftSavedAt(null);
+    setDraftSavingState("idle");
     if (photoNoticeTimerRef.current) {
       clearTimeout(photoNoticeTimerRef.current);
       photoNoticeTimerRef.current = null;
@@ -475,7 +595,16 @@ export default function Compose() {
           {images.length > 0 && (
             <div className="thumbs">
               {images.map((img, i) => (
-                <div className="thumb" key={`${img.filename}-${i}`}>
+                <div className="thumb" key={`${img.filename}-${i}`}
+                  draggable
+                  onDragStart={onDragStart(i)}
+                  onDragOver={onDragOver}
+                  onDrop={onDrop(i)}
+                  onDragEnd={onDragEnd}
+                  style={{
+                    opacity: draggedIdx === i ? 0.4 : 1,
+                    cursor: draggedIdx === i ? "grabbing" : "grab",
+                  }}>
                   <div className="thumb__num">{i + 1}</div>
                   <div className="thumb__img"
                     style={{ background: `url(data:${img.mediaType};base64,${img.base64}) center/cover` }} />
@@ -632,6 +761,210 @@ export default function Compose() {
         onReset={onReset}
         disabled={submitDisabled}
       />
+
+      <TitlebarActions
+        savingState={draftSavingState}
+        savedAt={draftSavedAt}
+        onSave={onSaveDraft}
+        onOpen={() => setShowDraftsModal(true)}
+        onReset={onReset}
+        draftCount={drafts.length}
+      />
+
+      {showDraftsModal && (
+        <DraftsModal
+          drafts={drafts}
+          currentDraftId={currentDraftId}
+          onClose={() => setShowDraftsModal(false)}
+          onLoad={onLoadDraft}
+          onDelete={onDeleteDraft}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============== Titlebar (portal) ==============
+
+function TitlebarActions(props: {
+  savingState: "idle" | "saving" | "error";
+  savedAt: Date | null;
+  onSave: () => void;
+  onOpen: () => void;
+  onReset: () => void;
+  draftCount: number;
+}) {
+  const { savingState, savedAt, onSave, onOpen, onReset, draftCount } = props;
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setHost(document.getElementById("titlebar-actions"));
+  }, []);
+  if (!host) return null;
+
+  const statusText = savingState === "saving"
+    ? "저장 중…"
+    : savingState === "error"
+      ? "저장 실패"
+      : savedAt ? `저장됨 · ${formatAgo(savedAt)}` : null;
+
+  return createPortal(
+    <>
+      {statusText && (
+        <span style={{
+          fontSize: "var(--text-xs)",
+          color: savingState === "error" ? "var(--error)" : "var(--text-3)",
+          alignSelf: "center",
+          marginRight: 4,
+        }}>
+          {statusText}
+        </span>
+      )}
+      <button className="btn btn--ghost btn--sm" onClick={onOpen}
+        title="임시저장 목록 불러오기">
+        불러오기{draftCount > 0 ? ` (${draftCount})` : ""}
+      </button>
+      <button className="btn btn--secondary btn--sm" onClick={onSave}
+        disabled={savingState === "saving"}>
+        임시저장
+      </button>
+      <button className="btn btn--ghost btn--sm" onClick={onReset}>
+        초기화
+      </button>
+    </>,
+    host,
+  );
+}
+
+function formatAgo(d: Date): string {
+  const diffMs = Date.now() - d.getTime();
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 45) return "방금";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  return d.toLocaleDateString("ko-KR");
+}
+
+// ============== Drafts modal ==============
+
+function DraftsModal({
+  drafts, currentDraftId, onClose, onLoad, onDelete,
+}: {
+  drafts: DraftSummary[];
+  currentDraftId: string | null;
+  onClose: () => void;
+  onLoad: (id: string) => void | Promise<void>;
+  onDelete: (id: string) => void | Promise<void>;
+}) {
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(10,10,10,0.5)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 100, padding: 24,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "var(--bg-elevated)", borderRadius: 16,
+        maxWidth: 640, width: "100%", maxHeight: "90vh", overflow: "auto",
+        boxShadow: "var(--shadow-3)",
+      }}>
+        <div className="result" style={{ padding: "var(--s-6)" }}>
+          <header className="result__header">
+            <span className="result__badge">
+              <span className="dot"></span>
+              임시저장 · {drafts.length}개
+            </span>
+            <span className="result__meta">카드를 누르면 폼에 불러와요</span>
+          </header>
+
+          {drafts.length === 0 ? (
+            <div style={{
+              padding: "var(--s-7) var(--s-3)",
+              textAlign: "center",
+              color: "var(--text-3)",
+              fontSize: "var(--text-sm)",
+              lineHeight: 1.6,
+            }}>
+              아직 임시저장한 글이 없어요.<br />
+              상단의 <b>임시저장</b> 버튼을 누르면 현재 폼 내용이 저장돼요.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {drafts.map((d) => (
+                <div key={d.id}
+                  onClick={() => void onLoad(d.id)}
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    padding: "12px 14px",
+                    border: "1px solid " + (d.id === currentDraftId
+                      ? "var(--text-1)"
+                      : "var(--border-1)"),
+                    borderRadius: "var(--r-md)",
+                    background: "var(--bg)",
+                    cursor: "pointer",
+                    alignItems: "center",
+                  }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      fontSize: "var(--text-md)",
+                      fontWeight: "var(--weight-medium)",
+                      color: "var(--text-1)",
+                      letterSpacing: "-0.01em",
+                    }}>
+                      <span style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}>{d.label}</span>
+                      {d.postType && (
+                        <span style={{
+                          fontSize: 10,
+                          padding: "2px 7px",
+                          borderRadius: "var(--r-pill)",
+                          background: "var(--bg-sunken)",
+                          color: "var(--text-2)",
+                          fontWeight: "var(--weight-medium)",
+                        }}>{d.postType}</span>
+                      )}
+                      {d.id === currentDraftId && (
+                        <span style={{
+                          fontSize: 10,
+                          padding: "2px 7px",
+                          borderRadius: "var(--r-pill)",
+                          background: "var(--marker-soft)",
+                          color: "var(--marker-deep)",
+                          fontWeight: "var(--weight-bold)",
+                        }}>편집 중</span>
+                      )}
+                    </div>
+                    <div style={{
+                      fontSize: "var(--text-xs)",
+                      color: "var(--text-3)",
+                      marginTop: 4,
+                    }}>
+                      {new Date(d.updatedAt).toLocaleString("ko-KR")}
+                    </div>
+                  </div>
+                  <button className="btn btn--icon" aria-label="삭제"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void onDelete(d.id);
+                    }}>
+                    <IconTrash />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="result__actions">
+            <button className="btn btn--secondary" onClick={onClose}
+              style={{ marginLeft: "auto" }}>닫기</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

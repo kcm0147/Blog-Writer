@@ -12,6 +12,9 @@ import {
 import { scrapeNaverBlog } from "./scrapers/naverBlog";
 import { loadProfile } from "./storage/styleProfile";
 import { listHistory, getHistory, deleteHistory } from "./storage/history";
+import {
+  saveDraft, listDrafts, getDraft, deleteDraft, type DraftPayload,
+} from "./storage/drafts";
 import { runAnalyze } from "./services/styleAnalyzer";
 import { runGenerate } from "./services/postGenerator";
 import { makeProvider } from "./llm";
@@ -189,5 +192,18 @@ export function registerIpc(): void {
   );
   ipcMain.handle("history:delete", (_e, id: string) =>
     deleteHistory(getDb(), requireId(id, "히스토리")),
+  );
+
+  ipcMain.handle("drafts:list", () => listDrafts(getDb()));
+  ipcMain.handle("drafts:get", (_e, id: string) =>
+    getDraft(getDb(), requireId(id, "임시저장")),
+  );
+  ipcMain.handle(
+    "drafts:save",
+    (_e, input: { id?: string; label: string; payload: DraftPayload }) =>
+      saveDraft(getDb(), input),
+  );
+  ipcMain.handle("drafts:delete", (_e, id: string) =>
+    deleteDraft(getDb(), requireId(id, "임시저장")),
   );
 }

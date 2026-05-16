@@ -59,6 +59,12 @@ const api: AppApi = {
     get: (id) => ipcRenderer.invoke("history:get", id),
     delete: (id) => ipcRenderer.invoke("history:delete", id),
   },
+  drafts: {
+    list: () => ipcRenderer.invoke("drafts:list"),
+    get: (id) => ipcRenderer.invoke("drafts:get", id),
+    save: (input) => ipcRenderer.invoke("drafts:save", input),
+    delete: (id) => ipcRenderer.invoke("drafts:delete", id),
+  },
 };
 
 contextBridge.exposeInMainWorld("api", api);

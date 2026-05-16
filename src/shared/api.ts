@@ -1,4 +1,5 @@
 import type {
+  Draft, DraftPayload, DraftSummary,
   GenerateInput, HistoryRecord, ImageInput, Provider, Sample,
   SettingsWithKeyStatus, StyleProfile,
 } from "./types";
@@ -58,6 +59,12 @@ export interface AppApi {
   history: {
     list(): Promise<HistoryRecord[]>;
     get(id: string): Promise<HistoryRecord | null>;
+    delete(id: string): Promise<void>;
+  };
+  drafts: {
+    list(): Promise<DraftSummary[]>;
+    get(id: string): Promise<Draft | null>;
+    save(input: { id?: string; label: string; payload: DraftPayload }): Promise<Draft>;
     delete(id: string): Promise<void>;
   };
 }

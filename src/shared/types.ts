@@ -88,3 +88,30 @@ export interface SettingsWithKeyStatus extends Settings {
   apiKeyMasked: Record<Provider, string | null>;
   models: Record<Provider, string>;
 }
+
+export interface DraftPayload {
+  storeName: string;
+  address: string;
+  visitDate: string;
+  postType: string;
+  postTypeExtra: string;
+  title: string;
+  keywords: string[];
+  length: number;
+  tone: string;
+  emphasis: string;
+  memo: string;
+  images: ImageInput[];
+}
+
+export interface DraftSummary {
+  id: string;
+  label: string;
+  storeName: string | null;
+  postType: string | null;
+  updatedAt: string;
+}
+
+export interface Draft extends DraftSummary {
+  payload: DraftPayload;
+}
