@@ -15,7 +15,7 @@
     "@anthropic-ai/sdk": "^0.40.0",
     "@google/generative-ai": "^0.21.0",
     "better-sqlite3": "^12.10.0",
-    "electron-store": "^10.0.0",
+    "electron-store": "^8.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.27.0",
