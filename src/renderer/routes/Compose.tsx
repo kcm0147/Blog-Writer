@@ -10,6 +10,7 @@ import type {
   GenerateInput, ImageInput, PostType, StyleFormatting, StyleProfile, Tone,
 } from "@shared/types";
 import type { GenerateOutcome } from "@shared/api";
+import { MAX_IMAGES } from "@shared/constants";
 
 type Phase = "idle" | "validation" | "loading" | "result" | "error";
 
@@ -174,10 +175,10 @@ export default function Compose() {
   // --- File handling ---
   const onFiles = async (files: FileList | null) => {
     if (!files) return;
-    const remaining = 10 - images.length;
+    const remaining = MAX_IMAGES - images.length;
     if (files.length > remaining) {
       const excess = files.length - remaining;
-      setPhotoNotice(`사진은 최대 10장까지만 첨부할 수 있어요. ${excess}장은 제외됐습니다.`);
+      setPhotoNotice(`사진은 최대 ${MAX_IMAGES}장까지만 첨부할 수 있어요. ${excess}장은 제외됐습니다.`);
       if (photoNoticeTimerRef.current) clearTimeout(photoNoticeTimerRef.current);
       photoNoticeTimerRef.current = setTimeout(() => {
         if (mountedRef.current) setPhotoNotice(null);
@@ -195,7 +196,7 @@ export default function Compose() {
       }
     }
     if (!mountedRef.current) return;
-    setImages((prev) => [...prev, ...next].slice(0, 10));
+    setImages((prev) => [...prev, ...next].slice(0, MAX_IMAGES));
   };
 
   const removeImage = (i: number) => setImages((prev) => prev.filter((_, j) => j !== i));
@@ -408,7 +409,7 @@ export default function Compose() {
           <div className="dropzone" onClick={() => fileInputRef.current?.click()}>
             <div className="dropzone__icon"><IconImage /></div>
             <div className="dropzone__title">사진을 끌어 놓거나 <u>찾아보기</u></div>
-            <div className="dropzone__hint">JPG · PNG · 최대 10장, 5MB 이상은 자동 리사이즈</div>
+            <div className="dropzone__hint">JPG · PNG · 최대 {MAX_IMAGES}장, 5MB 이상은 자동 리사이즈</div>
             <input ref={fileInputRef} type="file" accept=".jpg,.jpeg,.png"
               multiple style={{ display: "none" }}
               onChange={(e) => { void onFiles(e.target.files); e.target.value = ""; }} />
@@ -426,7 +427,7 @@ export default function Compose() {
                     onClick={() => removeImage(i)}>×</button>
                 </div>
               ))}
-              {images.length < 10 && (
+              {images.length < MAX_IMAGES && (
                 <div className="thumb thumb--add" onClick={() => fileInputRef.current?.click()}>
                   <IconPlus width={20} height={20} />
                   <span>추가</span>

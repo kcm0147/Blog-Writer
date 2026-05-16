@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { extname } from "path";
 import type { ImageInput } from "@shared/types";
 
+export { MAX_IMAGES } from "@shared/constants";
 export const MAX_LONG_EDGE = 1568;
 const SUPPORTED = new Set([".jpg", ".jpeg", ".png"]);
 
