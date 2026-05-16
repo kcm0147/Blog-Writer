@@ -18,7 +18,15 @@ export interface AppApi {
   samples: {
     list(): Promise<Sample[]>;
     add(input: { label: string; body: string }): Promise<Sample>;
+    update(input: { id: string; label?: string; body?: string }): Promise<Sample>;
     delete(id: string): Promise<void>;
+    importFromNaver(input: { input: string; limit: number }): Promise<{
+      count: number;
+      samples: { id: string; label: string }[];
+    }>;
+    onImportProgress(
+      cb: (p: { total: number; done: number; currentTitle?: string }) => void,
+    ): () => void;
   };
   style: {
     getProfile(): Promise<StyleProfile | null>;

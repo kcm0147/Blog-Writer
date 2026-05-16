@@ -3,7 +3,10 @@ import {
   getSettings, setProvider, setWebSearch, setApiKey, clearApiKey, getApiKey,
   isValidProvider,
 } from "./storage/settings";
-import { addSample, listSamples, deleteSample } from "./storage/samples";
+import {
+  addSample, listSamples, deleteSample, updateSample, setSampleHtml,
+} from "./storage/samples";
+import { scrapeNaverBlog } from "./scrapers/naverBlog";
 import { loadProfile } from "./storage/styleProfile";
 import { listHistory, getHistory, deleteHistory } from "./storage/history";
 import { runAnalyze } from "./services/styleAnalyzer";
@@ -55,7 +58,36 @@ export function registerIpc(): void {
   ipcMain.handle("samples:add", (_e, input: { label: string; body: string }) =>
     addSample(getDb(), input),
   );
+  ipcMain.handle(
+    "samples:update",
+    (_e, input: { id: string; label?: string; body?: string }) =>
+      updateSample(getDb(), input),
+  );
   ipcMain.handle("samples:delete", (_e, id: string) => deleteSample(getDb(), id));
+
+  ipcMain.handle(
+    "samples:importFromNaver",
+    async (_e, args: { input: string; limit: number }) => {
+      try {
+        const posts = await scrapeNaverBlog(args.input, args.limit, (p) => {
+          for (const w of BrowserWindow.getAllWindows()) {
+            w.webContents.send("samples:import-progress", p);
+          }
+        });
+        const db = getDb();
+        const inserted: { id: string; label: string }[] = [];
+        for (const post of posts) {
+          const s = addSample(db, { label: post.title, body: post.body });
+          if (post.bodyHtml) setSampleHtml(db, s.id, post.bodyHtml);
+          inserted.push({ id: s.id, label: s.label });
+        }
+        return { count: inserted.length, samples: inserted };
+      } catch (e) {
+        console.error("importFromNaver failed", e);
+        throw new Error(toUserMessage(e));
+      }
+    },
+  );
 
   ipcMain.handle("style:getProfile", () => loadProfile(getDb()));
   ipcMain.handle("style:analyze", async () => {

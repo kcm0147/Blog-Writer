@@ -19,7 +19,13 @@ const api: AppApi = {
   samples: {
     list: () => ipcRenderer.invoke("samples:list"),
     add: (input) => ipcRenderer.invoke("samples:add", input),
+    update: (input) => ipcRenderer.invoke("samples:update", input),
     delete: (id) => ipcRenderer.invoke("samples:delete", id),
+    importFromNaver: (input) => ipcRenderer.invoke("samples:importFromNaver", input),
+    onImportProgress: (cb) =>
+      on("samples:import-progress", (p) =>
+        cb(p as { total: number; done: number; currentTitle?: string }),
+      ),
   },
   style: {
     getProfile: () => ipcRenderer.invoke("style:getProfile"),

@@ -19,6 +19,19 @@ export default function MyStyle() {
   const [search, setSearch] = useState("");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
+  // Naver import
+  const [showImport, setShowImport] = useState(false);
+  const [importInput, setImportInput] = useState("");
+  const [importLimit, setImportLimit] = useState(10);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] =
+    useState<{ total: number; done: number; currentTitle?: string } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<string | null>(null);
+
+  // Sample preview / edit
+  const [editing, setEditing] = useState<Sample | null>(null);
+
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -42,7 +55,10 @@ export default function MyStyle() {
     const off2 = api.style.onWarning((w) => {
       if (mountedRef.current) setWarnings((prev) => [...prev, w]);
     });
-    return () => { off1(); off2(); };
+    const off3 = api.samples.onImportProgress((p) => {
+      if (mountedRef.current) setImportProgress(p);
+    });
+    return () => { off1(); off2(); off3(); };
   }, []);
 
   const add = async () => {
@@ -76,6 +92,39 @@ export default function MyStyle() {
     }
   };
 
+  const runImport = async () => {
+    if (!importInput.trim() || importing) return;
+    setImporting(true);
+    setImportError(null);
+    setImportResult(null);
+    setImportProgress({ total: 0, done: 0 });
+    try {
+      const res = await api.samples.importFromNaver({
+        input: importInput.trim(),
+        limit: Math.max(1, Math.min(50, importLimit)),
+      });
+      if (!mountedRef.current) return;
+      setImportResult(`${res.count}개의 글을 가져왔어요.`);
+      setImportInput("");
+      await refresh();
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setImportError((e as Error).message);
+    } finally {
+      if (mountedRef.current) {
+        setImporting(false);
+        setImportProgress(null);
+      }
+    }
+  };
+
+  const saveEdit = async (next: { id: string; label: string; body: string }) => {
+    await api.samples.update(next);
+    if (!mountedRef.current) return;
+    setEditing(null);
+    await refresh();
+  };
+
   const filtered = samples.filter((sample) =>
     !search || sample.label.toLowerCase().includes(search.toLowerCase()),
   );
@@ -103,6 +152,10 @@ export default function MyStyle() {
           </p>
         </div>
         <div className="ms-hero__actions">
+          <button className="btn btn--secondary" onClick={() => setShowImport((v) => !v)}>
+            <IconPlus />
+            네이버 블로그에서 가져오기
+          </button>
           <button className="btn btn--secondary" onClick={() => setShowAdd((v) => !v)}>
             <IconPlus />
             새 글 추가
@@ -114,6 +167,63 @@ export default function MyStyle() {
           </button>
         </div>
       </header>
+
+      {/* Naver import form */}
+      {showImport && (
+        <section className="set-card" style={{ marginBottom: "var(--s-6)" }}>
+          <header className="set-card__head">
+            <div>
+              <h2 className="set-card__title">네이버 블로그에서 가져오기</h2>
+              <p className="set-card__sub">
+                블로그 URL 또는 아이디를 입력하면 RSS에서 최신 글을 자동으로 등록해요.
+              </p>
+            </div>
+          </header>
+          <div className="field">
+            <label className="label">블로그 URL 또는 아이디</label>
+            <input className="input" value={importInput}
+              onChange={(e) => setImportInput(e.target.value)}
+              placeholder="https://blog.naver.com/lotus_archive4u 또는 lotus_archive4u"
+              disabled={importing} />
+          </div>
+          <div className="field">
+            <label className="label">가져올 글 수 <span className="hint">최대 50</span></label>
+            <input className="input" type="number" min={1} max={50}
+              value={importLimit}
+              onChange={(e) => setImportLimit(Number(e.target.value) || 10)}
+              disabled={importing} />
+          </div>
+          {importing && importProgress && (
+            <div className="field-msg" style={{ marginTop: 8 }}>
+              {importProgress.total > 0
+                ? `${importProgress.done}/${importProgress.total} 진행 중${importProgress.currentTitle ? ` · ${importProgress.currentTitle}` : ""}`
+                : "RSS 가져오는 중…"}
+            </div>
+          )}
+          {importError && (
+            <div className="field-msg field-msg--error" style={{ marginTop: 8 }}>
+              <span className="field-msg__icon">!</span> {importError}
+            </div>
+          )}
+          {importResult && !importing && (
+            <div className="field-msg" style={{ marginTop: 8, color: "var(--success)" }}>
+              ✓ {importResult}
+            </div>
+          )}
+          <div className="result__actions" style={{ marginTop: "var(--s-3)" }}>
+            <button className="btn btn--secondary"
+              onClick={() => { setShowImport(false); setImportError(null); setImportResult(null); }}
+              disabled={importing}>
+              닫기
+            </button>
+            <button className="btn btn--primary"
+              onClick={runImport}
+              disabled={importing || !importInput.trim()}>
+              {importing ? "가져오는 중…" : "가져오기"}
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* Add form */}
       {showAdd && (
@@ -325,13 +435,14 @@ export default function MyStyle() {
             <div className="cell-action"></div>
           </div>
           {filtered.map((s) => (
-            <div className="ms-table__row" key={s.id}>
+            <div className="ms-table__row" key={s.id} onClick={() => setEditing(s)}>
               <div className="cell-label">{s.label}</div>
               <div className="cell-count">{s.charCount.toLocaleString()}자</div>
               <div className="cell-date">
                 {new Date(s.createdAt).toLocaleDateString("ko-KR")}
               </div>
-              <div className="cell-action" style={{ position: "relative" }}>
+              <div className="cell-action" style={{ position: "relative" }}
+                onClick={(e) => e.stopPropagation()}>
                 <button className="btn--icon btn"
                   onClick={() => setMenuOpenId(menuOpenId === s.id ? null : s.id)}>
                   <IconDots />
@@ -367,6 +478,112 @@ export default function MyStyle() {
       </section>
 
       <div style={{ height: 48 }}></div>
+
+      {editing && (
+        <SampleEditModal
+          sample={editing}
+          onClose={() => setEditing(null)}
+          onSave={saveEdit}
+          onDelete={async (id) => {
+            await api.samples.delete(id);
+            if (!mountedRef.current) return;
+            setEditing(null);
+            await refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SampleEditModal({
+  sample, onClose, onSave, onDelete,
+}: {
+  sample: Sample;
+  onClose: () => void;
+  onSave: (next: { id: string; label: string; body: string }) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [label, setLabel] = useState(sample.label);
+  const [body, setBody] = useState(sample.body);
+  const [saving, setSaving] = useState(false);
+
+  const dirty = label !== sample.label || body !== sample.body;
+
+  const handleSave = async () => {
+    if (!body.trim() || saving) return;
+    setSaving(true);
+    try {
+      await onSave({ id: sample.id, label: label.trim() || "(이름 없음)", body });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(10,10,10,0.5)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 100, padding: 24,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "var(--bg-elevated)", borderRadius: 16,
+        maxWidth: 760, width: "100%", maxHeight: "90vh", overflow: "auto",
+        boxShadow: "var(--shadow-3)",
+      }}>
+        <div className="result" style={{ padding: "var(--s-6)" }}>
+          <header className="result__header">
+            <span className="result__badge">
+              <span className="dot"></span>
+              학습한 글 · {sample.charCount.toLocaleString()}자
+            </span>
+            <span className="result__meta">
+              {new Date(sample.createdAt).toLocaleString("ko-KR")}
+            </span>
+          </header>
+
+          <div className="result__title-card">
+            <div className="result__title-label">라벨</div>
+            <input className="result__title-input"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)} />
+          </div>
+
+          <div className="result__body-card">
+            <div className="result__section-title">
+              본문
+              <span className="btn-link">{body.length.toLocaleString()}자</span>
+            </div>
+            <textarea
+              className="result__body"
+              spellCheck={false}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={18}
+              style={{
+                width: "100%", border: "none", outline: "none",
+                background: "transparent", resize: "vertical",
+                fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit",
+              }}
+            />
+          </div>
+
+          <div className="result__actions">
+            <button className="btn btn--secondary"
+              onClick={() => onDelete(sample.id)} disabled={saving}>
+              삭제
+            </button>
+            <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+              닫기
+            </button>
+            <button className="btn btn--primary"
+              onClick={handleSave}
+              disabled={saving || !dirty || !body.trim()}>
+              {saving ? "저장 중…" : "저장"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
