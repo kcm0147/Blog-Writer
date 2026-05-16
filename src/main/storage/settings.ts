@@ -33,13 +33,33 @@ function keyPath(p: Provider): string {
   return join(keysDir(), `${p}.bin`);
 }
 
+function maskApiKey(key: string | null): string | null {
+  if (!key) return null;
+  if (key.length <= 8) return "•".repeat(key.length);
+  return `${key.slice(0, 4)}${"•".repeat(8)}${key.slice(-4)}`;
+}
+
+function safeGetApiKey(p: Provider): string | null {
+  try {
+    return getApiKey(p);
+  } catch {
+    return null;
+  }
+}
+
 export function getSettings(): SettingsWithKeyStatus {
+  const claudeKey = safeGetApiKey("claude");
+  const geminiKey = safeGetApiKey("gemini");
   return {
     provider: store.get("provider"),
     useWebSearch: store.get("useWebSearch"),
     hasApiKey: {
-      claude: existsSync(keyPath("claude")),
-      gemini: existsSync(keyPath("gemini")),
+      claude: claudeKey !== null,
+      gemini: geminiKey !== null,
+    },
+    apiKeyMasked: {
+      claude: maskApiKey(claudeKey),
+      gemini: maskApiKey(geminiKey),
     },
   };
 }

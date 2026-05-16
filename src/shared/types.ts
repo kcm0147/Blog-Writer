@@ -75,4 +75,5 @@ export interface Settings {
 
 export interface SettingsWithKeyStatus extends Settings {
   hasApiKey: Record<Provider, boolean>;
+  apiKeyMasked: Record<Provider, string | null>;
 }

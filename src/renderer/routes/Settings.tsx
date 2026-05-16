@@ -135,6 +135,7 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
   };
 
   const hasKey = s.hasApiKey[s.provider];
+  const maskedKey = s.apiKeyMasked[s.provider];
   const isError = validateState.state === "fail";
 
   return (
@@ -177,7 +178,7 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
             <span className="key-field__prefix">{s.provider === "claude" ? "sk-ant-" : "AIza"}</span>
             <input type={showKey ? "text" : "password"}
               value={keyInput} onChange={(e) => setKeyInput(e.target.value)}
-              placeholder={hasKey ? "(저장됨 — 새 키로 덮어쓰려면 입력)" : "API 키 입력"} />
+              placeholder={hasKey ? `(${maskedKey ?? "저장됨"} — 덮어쓰려면 입력)` : "API 키 입력"} />
             <button className="key-field__toggle" aria-label="키 보기"
               onClick={() => setShowKey((v) => !v)}>
               <IconEye />
@@ -233,8 +234,9 @@ function AITab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promis
             <div className="dot"></div>
             <div className="text">
               <b>키 저장됨</b>
-              <span>'연결 확인'으로 동작 테스트를 해보세요</span>
+              <span style={{ fontFamily: "var(--font-mono)" }}>{maskedKey}</span>
             </div>
+            <div className="key-status-box__meta">'연결 확인'으로 테스트</div>
           </div>
         )}
         {!hasKey && (
