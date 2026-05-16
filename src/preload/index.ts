@@ -29,7 +29,13 @@ const api: AppApi = {
     importFromNaver: (input) => ipcRenderer.invoke("samples:importFromNaver", input),
     onImportProgress: (cb) =>
       on("samples:import-progress", (p) =>
-        cb(p as { total: number; done: number; currentTitle?: string }),
+        cb(p as {
+          total: number;
+          done: number;
+          currentTitle?: string;
+          skippedTitle?: string;
+          skippedReason?: "short_body" | "fetch_failed";
+        }),
       ),
     getHtml: (id) => ipcRenderer.invoke("samples:getHtml", id),
   },

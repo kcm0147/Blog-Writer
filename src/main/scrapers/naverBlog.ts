@@ -28,6 +28,8 @@ export interface ScrapeProgress {
   total: number;
   done: number;
   currentTitle?: string;
+  skippedTitle?: string;
+  skippedReason?: "short_body" | "fetch_failed";
 }
 
 export interface PostListItem {
@@ -191,9 +193,22 @@ export async function scrapeNaverBlog(
           bodyHtml,
           publishedAt: p.publishedAt,
         });
+      } else {
+        onProgress?.({
+          total: list.length,
+          done: i + 1,
+          skippedTitle: p.title,
+          skippedReason: "short_body",
+        });
       }
     } catch (e) {
       console.warn(`Skip ${p.postNo}:`, (e as Error).message);
+      onProgress?.({
+        total: list.length,
+        done: i + 1,
+        skippedTitle: p.title,
+        skippedReason: "fetch_failed",
+      });
     }
     if (i < list.length - 1 && delayMs > 0) await sleep(delayMs);
   }

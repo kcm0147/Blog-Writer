@@ -31,7 +31,13 @@ export interface AppApi {
       samples: { id: string; label: string }[];
     }>;
     onImportProgress(
-      cb: (p: { total: number; done: number; currentTitle?: string }) => void,
+      cb: (p: {
+        total: number;
+        done: number;
+        currentTitle?: string;
+        skippedTitle?: string;
+        skippedReason?: "short_body" | "fetch_failed";
+      }) => void,
     ): () => void;
     getHtml(id: string): Promise<string | null>;
   };
