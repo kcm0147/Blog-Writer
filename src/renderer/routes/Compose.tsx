@@ -52,6 +52,38 @@ function missingCount(m: MissingFields): number {
   return n;
 }
 
+function buildStyledHtml(body: string, profile: StyleProfile | null): string {
+  const formatting = profile?.formatting;
+  const align = formatting?.paragraphAlign ?? "left";
+  const color = formatting?.primaryColor ?? "";
+  const fontFamily = formatting?.fontFamily ?? "";
+  const bodyFontSize = formatting?.bodyFontSize
+    ? `${formatting.bodyFontSize}px`
+    : "";
+  const paragraphs = body
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return paragraphs
+    .map((p) => {
+      const styles = [
+        `text-align:${align}`,
+        color ? `color:${color}` : "",
+        fontFamily ? `font-family:${fontFamily}` : "",
+        bodyFontSize ? `font-size:${bodyFontSize}` : "",
+      ]
+        .filter(Boolean)
+        .join(";");
+      const safe = p
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\n/g, "<br>");
+      return `<p style="${styles}">${safe}</p>`;
+    })
+    .join("");
+}
+
 export default function Compose() {
   const { refresh: refreshCounts, samples, settings } = useCounts();
   const [profile, setProfile] = useState<StyleProfile | null | undefined>(undefined);
@@ -498,7 +530,8 @@ export default function Compose() {
         {phase === "validation" && <BlockedResult validation={validation} />}
         {phase === "loading" && <LoadingResult stage={progressStage} photoCount={images.length} />}
         {phase === "result" && outcome && (
-          <ResultView outcome={outcome} onSetOutcome={setOutcome} onReset={onReset} />
+          <ResultView outcome={outcome} onSetOutcome={setOutcome} onReset={onReset}
+            profile={profile ?? null} />
         )}
         {phase === "error" && (
           <ErrorView message={errorMessage ?? ""} onRetry={onSubmit} />
@@ -743,11 +776,12 @@ function LoadingResult({ stage, photoCount }: { stage: string | null; photoCount
 }
 
 function ResultView({
-  outcome, onSetOutcome, onReset,
+  outcome, onSetOutcome, onReset, profile,
 }: {
   outcome: GenerateOutcome;
   onSetOutcome: (o: GenerateOutcome) => void;
   onReset: () => void;
+  profile: StyleProfile | null;
 }) {
   const r = outcome.result;
   const bodyChars = r.body.length;
@@ -757,6 +791,32 @@ function ResultView({
     const md = `# ${r.title}\n\n${r.body}\n\n${r.hashtags.map((h) => `#${h}`).join(" ")}`;
     navigator.clipboard.writeText(md);
   };
+  const copyStyled = async () => {
+    const html = buildStyledHtml(r.body, profile);
+    try {
+      const ClipItem = (globalThis as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
+      if (typeof ClipItem === "function") {
+        const blobHtml = new Blob([html], { type: "text/html" });
+        const blobText = new Blob([r.body], { type: "text/plain" });
+        await navigator.clipboard.write([
+          new ClipItem({ "text/html": blobHtml, "text/plain": blobText }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(html);
+      }
+    } catch (e) {
+      console.error("styled copy failed", e);
+      await navigator.clipboard.writeText(r.body);
+    }
+  };
+  const hasFormatting = Boolean(
+    profile?.formatting && (
+      profile.formatting.fontFamily ||
+      profile.formatting.bodyFontSize ||
+      profile.formatting.primaryColor ||
+      profile.formatting.paragraphAlign
+    ),
+  );
 
   return (
     <div className="result">
@@ -853,6 +913,12 @@ function ResultView({
           <IconCopy />
           마크다운으로 복사
         </button>
+        {hasFormatting && (
+          <button className="btn btn--secondary" onClick={copyStyled}>
+            <IconCopy />
+            서식 포함 복사
+          </button>
+        )}
         <button className="btn btn--primary" onClick={copyBody}>
           <IconCopy />
           본문 복사
