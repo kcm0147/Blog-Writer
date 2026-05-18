@@ -34,17 +34,24 @@ const DEFAULT_MODELS = {
   gemini: "gemini-3.1-flash-lite",
 } as const;
 
-const store = new Store<StoreSchema>({
-  defaults: {
-    provider: "claude",
-    useWebSearch: false,
-    customDataDir: null,
-    models: { ...DEFAULT_MODELS },
-    defaultPostType: "맛집",
-    defaultLength: 1500,
-    defaultTone: "my_style",
-  },
-});
+let storeInstance: Store<StoreSchema> | null = null;
+
+function getStore(): Store<StoreSchema> {
+  if (!storeInstance) {
+    storeInstance = new Store<StoreSchema>({
+      defaults: {
+        provider: "claude",
+        useWebSearch: false,
+        customDataDir: null,
+        models: { ...DEFAULT_MODELS },
+        defaultPostType: "맛집",
+        defaultLength: 1500,
+        defaultTone: "my_style",
+      },
+    });
+  }
+  return storeInstance;
+}
 
 const DB_FILENAME = "naver-blog-writer.db";
 const KEYS_DIRNAME = "keys";
@@ -54,7 +61,7 @@ function defaultDataDir(): string {
 }
 
 export function getDataDir(): string {
-  const custom = store.get("customDataDir");
+  const custom = getStore().get("customDataDir");
   if (typeof custom === "string" && custom.length > 0) {
     return custom;
   }
@@ -94,11 +101,11 @@ export function getSettings(): SettingsWithKeyStatus {
   const claudeKey = safeGetApiKey("claude");
   const geminiKey = safeGetApiKey("gemini");
   return {
-    provider: store.get("provider"),
-    useWebSearch: store.get("useWebSearch"),
-    defaultPostType: store.get("defaultPostType") as any,
-    defaultLength: store.get("defaultLength"),
-    defaultTone: store.get("defaultTone") as any,
+    provider: getStore().get("provider"),
+    useWebSearch: getStore().get("useWebSearch"),
+    defaultPostType: getStore().get("defaultPostType") as any,
+    defaultLength: getStore().get("defaultLength"),
+    defaultTone: getStore().get("defaultTone") as any,
     hasApiKey: {
       claude: claudeKey !== null,
       gemini: geminiKey !== null,
@@ -107,13 +114,13 @@ export function getSettings(): SettingsWithKeyStatus {
       claude: maskApiKey(claudeKey),
       gemini: maskApiKey(geminiKey),
     },
-    models: store.get("models") || { ...DEFAULT_MODELS },
+    models: getStore().get("models") || { ...DEFAULT_MODELS },
   };
 }
 
 export function getModel(p: Provider): string {
   assertProvider(p);
-  const models = store.get("models") || { ...DEFAULT_MODELS };
+  const models = getStore().get("models") || { ...DEFAULT_MODELS };
   return models[p] || DEFAULT_MODELS[p];
 }
 
@@ -121,23 +128,23 @@ export function setModel(p: Provider, model: string): void {
   assertProvider(p);
   const trimmed = (model ?? "").trim();
   if (!trimmed) throw new Error("모델 이름이 비어 있습니다.");
-  const current = store.get("models") || { ...DEFAULT_MODELS };
-  store.set("models", { ...current, [p]: trimmed });
+  const current = getStore().get("models") || { ...DEFAULT_MODELS };
+  getStore().set("models", { ...current, [p]: trimmed });
 }
 
 export function setProvider(p: Provider): void {
   assertProvider(p);
-  store.set("provider", p);
+  getStore().set("provider", p);
 }
 
 export function setWebSearch(on: boolean): void {
-  store.set("useWebSearch", on);
+  getStore().set("useWebSearch", on);
 }
 
 export function setDefaultValues(type: string, len: number, tone: string): void {
-  store.set("defaultPostType", type);
-  store.set("defaultLength", len);
-  store.set("defaultTone", tone);
+  getStore().set("defaultPostType", type);
+  getStore().set("defaultLength", len);
+  getStore().set("defaultTone", tone);
 }
 
 export function setApiKey(p: Provider, key: string): void {
@@ -234,12 +241,12 @@ export function setCustomDataDir(newPath: string | null): {
   if (newPath === null) {
     const fallback = defaultDataDir();
     if (resolve(currentDir) === resolve(fallback)) {
-      store.set("customDataDir", null);
+      getStore().set("customDataDir", null);
       return { moved: false, oldDir: currentDir };
     }
     ensureWritableDirectory(fallback);
     copyDataFiles(currentDir, fallback);
-    store.set("customDataDir", null);
+    getStore().set("customDataDir", null);
     return { moved: true, oldDir: currentDir };
   }
 
@@ -255,6 +262,6 @@ export function setCustomDataDir(newPath: string | null): {
   }
   ensureWritableDirectory(resolvedNew);
   copyDataFiles(currentDir, resolvedNew);
-  store.set("customDataDir", resolvedNew);
+  getStore().set("customDataDir", resolvedNew);
   return { moved: true, oldDir: currentDir };
 }
