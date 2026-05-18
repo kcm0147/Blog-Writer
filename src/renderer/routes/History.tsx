@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useCounts } from "../lib/counts";
 import { IconCopy, IconSearch, IconTrash } from "../lib/icons";
-import type { HistoryRecord, PostType } from "@shared/types";
+import type { HistoryRecord, PostType, StyleProfile, ImageInput } from "@shared/types";
+import { buildStyledHtml, baseStyleFromFormatting, copyStyledHtml } from "../lib/naver-preview";
 
 const FILTERS: Array<{ value: "all" | PostType; label: string }> = [
   { value: "all", label: "전체" },
@@ -25,12 +26,17 @@ export default function History() {
   const [open, setOpen] = useState<HistoryRecord | null>(null);
   const [filter, setFilter] = useState<"all" | PostType>("all");
   const [search, setSearch] = useState("");
+  const [profile, setProfile] = useState<StyleProfile | null>(null);
 
   const refresh = async () => {
     setRecords(await api.history.list());
     await refreshCounts();
   };
   useEffect(() => { void refresh(); }, []);
+
+  useEffect(() => {
+    void api.style.getProfile().then((p) => setProfile(p));
+  }, []);
 
   const remove = async (id: string) => {
     await api.history.delete(id);
@@ -58,7 +64,6 @@ export default function History() {
     return c;
   }, [records]);
 
-  // Group by week
   const groups = useMemo(() => groupByPeriod(filtered), [filtered]);
 
   return (
@@ -108,7 +113,7 @@ export default function History() {
                 <h3 className="hist-card__title">{r.title}</h3>
                 <p className="hist-card__preview">{previewOf(r.body)}</p>
                 <div className="hist-card__foot">
-                  <span className="hist-card__chars">{r.body.length.toLocaleString()}자</span>
+                  <span className="hist-card__chars">{r.body.replace(/\s/g, '').length.toLocaleString()}자</span>
                   <span className="hist-card__sep">·</span>
                   <span className="hist-card__tags">
                     {r.hashtags.slice(0, 2).map((h) => `#${h}`).join(" ")}
@@ -122,18 +127,64 @@ export default function History() {
 
       <div style={{ height: 64 }}></div>
 
-      {open && <DetailModal record={open} onClose={() => setOpen(null)} onDelete={remove} />}
+      {open && <DetailModal record={open} profile={profile} onClose={() => setOpen(null)} onDelete={remove} />}
     </div>
   );
 }
 
-function DetailModal({ record, onClose, onDelete }: {
+function DetailModal({ record, profile, onClose, onDelete }: {
   record: HistoryRecord;
+  profile: StyleProfile | null;
   onClose: () => void;
   onDelete: (id: string) => Promise<void>;
 }) {
+  const [tab, setTab] = useState<"preview" | "text">("preview");
+  const [images, setImages] = useState<ImageInput[]>([]);
+
+  useEffect(() => {
+    void api.history.getImages(record.id).then((imgs) => setImages(imgs));
+  }, [record.id]);
+
+  const hasFormatting = Boolean(
+    profile?.formatting && (
+      profile.formatting.fontFamily ||
+      profile.formatting.bodyFontSize ||
+      profile.formatting.primaryColor ||
+      profile.formatting.paragraphAlign
+    ),
+  );
+
   const copyBody = () => navigator.clipboard.writeText(record.body);
   const copyHashtags = () => navigator.clipboard.writeText(record.hashtags.map((h) => `#${h}`).join(" "));
+
+  // 기능 3: 사진 가이드 포함 복사
+  const copyWithPhotoGuide = () => {
+    const mapEntries = Object.entries(record.imageMap);
+    const guide = record.body + "\n\n" +
+      "─────── 📸 사진 삽입 가이드 ───────\n" +
+      "네이버 에디터에서 아래 순서대로 사진을 삽입해주세요:\n\n" +
+      mapEntries.map(([marker, filename], i) =>
+        `${i + 1}. ${marker} 위치 → ${filename}`
+      ).join("\n") +
+      "\n───────────────────────────────";
+    void navigator.clipboard.writeText(guide);
+  };
+
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const copyStyled = async () => {
+    try {
+      await copyStyledHtml(record.body, profile);
+      setCopyMsg("서식 복사 완료! 네이버 에디터에 Ctrl+V 하세요");
+      setTimeout(() => setCopyMsg(null), 3000);
+    } catch {
+      setCopyMsg("복사 실패");
+      setTimeout(() => setCopyMsg(null), 2000);
+    }
+  };
+
+  const hasImageMap = Object.keys(record.imageMap).length > 0;
+  const styledHtml = buildStyledHtml(record.body, profile, images);
+
   return (
     <div onClick={onClose} style={{
       position: "fixed", inset: 0, background: "rgba(10,10,10,0.5)",
@@ -159,11 +210,49 @@ function DetailModal({ record, onClose, onDelete }: {
             <input className="result__title-input" value={record.title} readOnly />
           </div>
 
+          {/* 탭 전환 */}
+          <div className="seg is-full" role="tablist" style={{ marginBottom: "var(--s-3)" }}>
+            <button
+              className={tab === "preview" ? "is-active" : ""}
+              onClick={() => setTab("preview")}>
+              서식 미리보기
+            </button>
+            <button
+              className={tab === "text" ? "is-active" : ""}
+              onClick={() => setTab("text")}>
+              원문 텍스트
+            </button>
+          </div>
+
           <div className="result__body-card">
-            <div className="result__section-title">본문</div>
-            <div className="result__body" style={{ whiteSpace: "pre-wrap" }}>
-              {record.body}
+            <div className="result__section-title">
+              {tab === "preview" ? "서식 미리보기" : "본문"}
+              {tab === "preview" && hasFormatting && (
+                <span className="btn-link" style={{ marginLeft: 8 }}>서식 적용됨</span>
+              )}
+              {tab === "text" && (
+                <span className="btn-link" style={{ marginLeft: 8 }}>
+                  {record.body.replace(/\s/g, '').length.toLocaleString()}자
+                </span>
+              )}
             </div>
+            {tab === "preview" ? (
+              <iframe
+                title="서식 미리보기"
+                srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body { margin: 0; padding: 16px; ${baseStyleFromFormatting(profile?.formatting)} } p { margin: 0 0 1em; } strong { font-weight: 700; } img { max-width: 100%; height: auto; }</style></head><body>${styledHtml}</body></html>`}
+                sandbox=""
+                style={{
+                  width: "100%", minHeight: "400px",
+                  border: "1px solid var(--border-1)",
+                  borderRadius: "var(--r-md, 8px)",
+                  background: "#fff",
+                }}
+              />
+            ) : (
+              <div className="result__body" style={{ whiteSpace: "pre-wrap" }}>
+                {record.body}
+              </div>
+            )}
           </div>
 
           <div className="result__hashtags">
@@ -179,17 +268,56 @@ function DetailModal({ record, onClose, onDelete }: {
             </div>
           </div>
 
+          {/* 사진 매핑 + 가이드 복사 */}
+          {hasImageMap && (
+            <div className="result__map">
+              <div className="result__section-title">
+                📸 사진 삽입 순서
+                <span className="btn-link" onClick={copyWithPhotoGuide} style={{ cursor: "pointer" }}>
+                  <IconCopy />
+                  본문 + 사진 가이드 복사
+                </span>
+              </div>
+              <table className="map-table">
+                <tbody>
+                  {Object.entries(record.imageMap).map(([marker, filename], i) => (
+                    <tr key={marker}>
+                      <td>
+                        <span className="marker-cell">
+                          <span className="num">{i + 1}</span>
+                          <span className="file">{filename}</span>
+                        </span>
+                      </td>
+                      <td className="desc">{marker} 위치에 삽입</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="result__actions">
-            <button className="btn btn--secondary" onClick={() => onDelete(record.id)}>
+            <button className="btn btn--secondary" onClick={() => void onDelete(record.id)}>
               <IconTrash />
               삭제
             </button>
             <button className="btn btn--secondary" onClick={onClose}>닫기</button>
-            <button className="btn btn--primary" onClick={copyBody}>
+            {hasImageMap && (
+              <button className="btn btn--secondary" onClick={copyWithPhotoGuide}>
+                <IconCopy />
+                사진 가이드 포함 복사
+              </button>
+            )}
+            <button className="btn btn--primary" onClick={copyStyled}>
               <IconCopy />
-              본문 복사
+              서식 복사 (네이버용)
             </button>
           </div>
+          {copyMsg && (
+            <div style={{ textAlign: "center", marginTop: 8, fontSize: 13, color: "var(--accent)", fontWeight: 600 }}>
+              {copyMsg}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -197,7 +325,7 @@ function DetailModal({ record, onClose, onDelete }: {
 }
 
 function previewOf(body: string): string {
-  const stripped = body.replace(/\[사진\d+\]/g, "").replace(/\s+/g, " ").trim();
+  const stripped = body.replace(/\[사진\d+\]/g, "").replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
   return stripped.length > 140 ? stripped.slice(0, 140) + "…" : stripped;
 }
 

@@ -24,6 +24,9 @@ type StoreSchema = {
   useWebSearch: boolean;
   customDataDir: string | null;
   models: { claude: string; gemini: string };
+  defaultPostType?: string;
+  defaultLength?: number;
+  defaultTone?: string;
 };
 
 const DEFAULT_MODELS = {
@@ -37,6 +40,9 @@ const store = new Store<StoreSchema>({
     useWebSearch: false,
     customDataDir: null,
     models: { ...DEFAULT_MODELS },
+    defaultPostType: "맛집",
+    defaultLength: 1500,
+    defaultTone: "my_style",
   },
 });
 
@@ -90,6 +96,9 @@ export function getSettings(): SettingsWithKeyStatus {
   return {
     provider: store.get("provider"),
     useWebSearch: store.get("useWebSearch"),
+    defaultPostType: store.get("defaultPostType") as any,
+    defaultLength: store.get("defaultLength"),
+    defaultTone: store.get("defaultTone") as any,
     hasApiKey: {
       claude: claudeKey !== null,
       gemini: geminiKey !== null,
@@ -123,6 +132,12 @@ export function setProvider(p: Provider): void {
 
 export function setWebSearch(on: boolean): void {
   store.set("useWebSearch", on);
+}
+
+export function setDefaultValues(type: string, len: number, tone: string): void {
+  store.set("defaultPostType", type);
+  store.set("defaultLength", len);
+  store.set("defaultTone", tone);
 }
 
 export function setApiKey(p: Provider, key: string): void {

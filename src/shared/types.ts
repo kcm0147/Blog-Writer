@@ -18,6 +18,8 @@ export interface StyleFormatting {
   paragraphAlign: "left" | "center" | "right" | null;
   primaryColor: string | null;
   emphasisColor: string | null;
+  /** 글자 배경 강조색 (네이버 에디터 하이라이트) */
+  highlightColor: string | null;
 }
 
 export interface StyleProfile {
@@ -81,6 +83,9 @@ export interface HistoryRecord extends GenerationResult {
 export interface Settings {
   provider: Provider;
   useWebSearch: boolean;
+  defaultPostType?: PostType;
+  defaultLength?: number;
+  defaultTone?: Tone;
 }
 
 export interface SettingsWithKeyStatus extends Settings {

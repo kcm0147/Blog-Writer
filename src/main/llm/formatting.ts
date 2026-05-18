@@ -25,6 +25,8 @@ interface RawObservation {
   fontSize?: number;
   align?: "left" | "center" | "right";
   color?: string;
+  bgColor?: string;
+  isBold?: boolean;
   isHeading?: boolean;
 }
 
@@ -61,12 +63,24 @@ export function observe(html: string): RawObservation[] {
       const colorM = style.match(/color\s*:\s*(#[0-9a-fA-F]{3,8})/);
       const color = colorM && colorM[1] ? colorM[1].toLowerCase() : undefined;
 
-      if (fontSize !== undefined || fontFamily || color) {
+      // 배경색 (하이라이트) 추출
+      const bgM = style.match(/background-color\s*:\s*(#[0-9a-fA-F]{3,8}|rgb[^)]*\))/i);
+      const bgClassM = classes.match(/se-bg-([A-Fa-f0-9]{6})/);
+      const bgColor = bgM?.[1]?.toLowerCase()
+        ?? (bgClassM?.[1] ? `#${bgClassM[1].toLowerCase()}` : undefined);
+
+      // Bold 감지 (<b>, <strong> 또는 font-weight:bold)
+      const isBold = /font-weight\s*:\s*(bold|[7-9]00)/i.test(style)
+        || /<(?:b|strong)\b/i.test(inner);
+
+      if (fontSize !== undefined || fontFamily || color || bgColor) {
         observations.push({
           fontFamily,
           fontSize,
           align,
           color,
+          bgColor,
+          isBold,
           isHeading: fontSize !== undefined && fontSize >= 24,
         });
       }
@@ -122,6 +136,15 @@ export function extractFormatting(htmls: string[]): StyleFormatting {
   const primaryColor = colorCounts[0]?.[0] ?? null;
   const emphasisColor = colorCounts[1]?.[0] ?? null;
 
+  // 배경 강조색 (highlight)
+  const bgColors = bodyObs
+    .map((o) => o.bgColor)
+    .filter((v): v is string => Boolean(v));
+  const bgCountMap = new Map<string, number>();
+  for (const c of bgColors) bgCountMap.set(c, (bgCountMap.get(c) ?? 0) + 1);
+  const bgCounts = [...bgCountMap.entries()].sort((a, b) => b[1] - a[1]);
+  const highlightColor = bgCounts[0]?.[0] ?? null;
+
   return {
     fontFamily,
     bodyFontSize,
@@ -129,5 +152,6 @@ export function extractFormatting(htmls: string[]): StyleFormatting {
     paragraphAlign,
     primaryColor,
     emphasisColor,
+    highlightColor,
   };
 }

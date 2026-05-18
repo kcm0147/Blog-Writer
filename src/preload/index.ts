@@ -18,6 +18,7 @@ const api: AppApi = {
     validateApiKey: (p) => ipcRenderer.invoke("settings:validateApiKey", p),
     getDataDir: () => ipcRenderer.invoke("settings:getDataDir"),
     setDataDir: (newPath) => ipcRenderer.invoke("settings:setDataDir", newPath),
+    setDefaultValues: (t, l, tn) => ipcRenderer.invoke("settings:setDefaultValues", t, l, tn),
   },
   dialog: {
     pickFolder: () => ipcRenderer.invoke("dialog:pickFolder"),
@@ -43,6 +44,9 @@ const api: AppApi = {
   style: {
     getProfile: () => ipcRenderer.invoke("style:getProfile"),
     analyze: () => ipcRenderer.invoke("style:analyze"),
+    updateProfile: (profile) => ipcRenderer.invoke("style:updateProfile", profile),
+    listHistory: () => ipcRenderer.invoke("style:listHistory"),
+    restoreHistory: (id) => ipcRenderer.invoke("style:restoreHistory", id),
     onProgress: (cb) => on("style:progress", (stage) => cb(stage as string)),
     onWarning: (cb) => on("style:warning", (msg) => cb(msg as string)),
   },
@@ -58,6 +62,7 @@ const api: AppApi = {
     list: () => ipcRenderer.invoke("history:list"),
     get: (id) => ipcRenderer.invoke("history:get", id),
     delete: (id) => ipcRenderer.invoke("history:delete", id),
+    getImages: (id) => ipcRenderer.invoke("history:images", id),
   },
   drafts: {
     list: () => ipcRenderer.invoke("drafts:list"),

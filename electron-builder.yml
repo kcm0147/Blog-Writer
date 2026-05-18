@@ -5,6 +5,8 @@ directories:
 files:
   - out/**/*
   - package.json
+asarUnpack:
+  - "**/*.node"
 mac:
   target:
     - dmg

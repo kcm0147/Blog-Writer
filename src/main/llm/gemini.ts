@@ -66,9 +66,7 @@ export class GeminiProvider implements LLMProvider {
     // with responseMimeType: "application/json". When web search is on, we
     // drop the JSON mime type and rely on the system prompt to enforce JSON.
     const tools = input.useWebSearch
-      ? ([{ googleSearchRetrieval: {} }] as unknown as Parameters<
-          GoogleGenerativeAI["getGenerativeModel"]
-        >[0]["tools"])
+      ? ([{ google_search: {} }] as any)
       : undefined;
 
     const gm = this.client.getGenerativeModel({

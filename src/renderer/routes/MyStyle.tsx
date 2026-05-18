@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useCounts } from "../lib/counts";
 import { IconDots, IconPlus, IconSearch, IconSpark } from "../lib/icons";
-import type { Sample, StyleProfile } from "@shared/types";
+import type { Sample, StyleProfile, StyleFormatting } from "@shared/types";
 
 const STEP_LABELS: Record<string, string> = {
   "step:samples_loaded": "[1/4] 샘플 글 로드 완료",
@@ -39,6 +39,14 @@ export default function MyStyle() {
 
   // Sample preview / edit
   const [editing, setEditing] = useState<Sample | null>(null);
+
+  // Manual Profile Edit
+  const [editMode, setEditMode] = useState(false);
+  const [editProfileData, setEditProfileData] = useState<StyleProfile | null>(null);
+
+  // History Rollback
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyList, setHistoryList] = useState<Array<{ id: string; createdAt: string; profileInfo: any }> | null>(null);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -109,6 +117,33 @@ export default function MyStyle() {
     }
   };
 
+  const startEditProfile = () => {
+    if (!profile) return;
+    setEditProfileData(JSON.parse(JSON.stringify(profile)));
+    setEditMode(true);
+  };
+
+  const saveEditProfile = async () => {
+    if (!editProfileData) return;
+    await api.style.updateProfile(editProfileData);
+    setEditMode(false);
+    await refresh();
+  };
+
+  const loadHistory = async () => {
+    setShowHistory(true);
+    setHistoryList(null);
+    const list = await api.style.listHistory();
+    if (!mountedRef.current) return;
+    setHistoryList(list);
+  };
+
+  const restoreHistory = async (id: string) => {
+    await api.style.restoreHistory(id);
+    setShowHistory(false);
+    await refresh();
+  };
+
   const runImport = async () => {
     if (!importInput.trim() || importing) return;
     setImporting(true);
@@ -119,7 +154,7 @@ export default function MyStyle() {
     try {
       const res = await api.samples.importFromNaver({
         input: importInput.trim(),
-        limit: Math.max(1, Math.min(50, importLimit)),
+        limit: Math.max(1, importLimit),
       });
       if (!mountedRef.current) return;
       if (res.skipped > 0) {
@@ -160,7 +195,7 @@ export default function MyStyle() {
 
   // Tone distribution rendering
   const toneEntries = profile
-    ? Object.entries(profile.toneDistribution)
+    ? Object.entries(profile.toneDistribution || {})
       .filter(([, v]) => v > 0)
       .sort((a, b) => b[1] - a[1])
     : [];
@@ -184,8 +219,22 @@ export default function MyStyle() {
             <IconPlus />
             새 글 추가
           </button>
+          
+          {profile && (
+            <>
+              <button className="btn btn--secondary" onClick={loadHistory} disabled={analyzing || editMode}>
+                이전 스타일 불러오기 (롤백)
+              </button>
+              {!editMode && (
+                <button className="btn btn--secondary" onClick={startEditProfile} disabled={analyzing}>
+                  수동 편집
+                </button>
+              )}
+            </>
+          )}
+
           <button className="btn btn--primary" onClick={analyze}
-            disabled={analyzing || samples.length === 0}>
+            disabled={analyzing || samples.length === 0 || editMode}>
             <IconSpark />
             {analyzing ? "분석 중…" : profile ? "다시 분석" : "스타일 분석 시작"}
           </button>
@@ -211,8 +260,8 @@ export default function MyStyle() {
               disabled={importing} />
           </div>
           <div className="field">
-            <label className="label">가져올 글 수 <span className="hint">최대 50</span></label>
-            <input className="input" type="number" min={1} max={50}
+            <label className="label">가져올 글 수 <span className="hint">권장: 최근 10~20개 (제한 없음)</span></label>
+            <input className="input" type="number" min={1}
               value={importLimit}
               onChange={(e) => setImportLimit(Number(e.target.value) || 10)}
               disabled={importing} />
@@ -347,8 +396,8 @@ export default function MyStyle() {
         </div>
       )}
 
-      {/* ANALYSIS GRID */}
-      {profile && (
+      {/* ANALYSIS GRID or EDIT FORM */}
+      {profile && !editMode && (
         <section className="analysis-grid">
           {/* Tone */}
           <article className="ana-card ana-card--span-2">
@@ -417,10 +466,10 @@ export default function MyStyle() {
               <span className="ana-card__hint">2번 이상 등장한 표현</span>
             </header>
             <div className="word-cloud">
-              {profile.commonExpressions.length === 0 && (
+              {(!profile.commonExpressions || profile.commonExpressions.length === 0) && (
                 <span className="word word--sm">아직 자주 쓰는 표현이 없어요</span>
               )}
-              {profile.commonExpressions.map((w, i) => (
+              {(profile.commonExpressions || []).map((w, i) => (
                 <span key={w} className={`word word--${wordSize(i)}`}>{w}</span>
               ))}
             </div>
@@ -493,6 +542,18 @@ export default function MyStyle() {
                     {profile.formatting.emphasisColor}
                   </li>
                 )}
+                {profile.formatting?.highlightColor && (
+                  <li>
+                    <span style={{ color: "var(--text-3)" }}>배경 강조색</span> ·{" "}
+                    <span style={{
+                      background: profile.formatting.highlightColor,
+                      display: "inline-block", width: 12, height: 12,
+                      borderRadius: 3, verticalAlign: "middle",
+                      marginRight: 6, border: "1px solid var(--border-1)",
+                    }} />
+                    {profile.formatting.highlightColor}
+                  </li>
+                )}
               </ul>
             </article>
           ) : (
@@ -509,6 +570,14 @@ export default function MyStyle() {
             </article>
           )}
         </section>
+      )}
+      {editMode && editProfileData && (
+        <EditProfileForm 
+          data={editProfileData} 
+          setData={setEditProfileData} 
+          onSave={saveEditProfile} 
+          onCancel={() => setEditMode(false)} 
+        />
       )}
 
       {/* SAMPLES LIST */}
@@ -591,6 +660,14 @@ export default function MyStyle() {
             setEditing(null);
             await refresh();
           }}
+        />
+      )}
+
+      {showHistory && (
+        <HistoryModal
+          list={historyList}
+          onClose={() => setShowHistory(false)}
+          onRestore={restoreHistory}
         />
       )}
     </div>
@@ -709,7 +786,7 @@ function SampleEditModal({
             <div className="result__body-card">
               <div className="result__section-title">
                 본문
-                <span className="btn-link">{body.length.toLocaleString()}자</span>
+                <span className="btn-link">{body.replace(/\s/g, '').length.toLocaleString()}자</span>
               </div>
               <textarea
                 className="result__body"
@@ -766,10 +843,202 @@ function hasFormattingData(profile: StyleProfile): boolean {
   if (!f) return false;
   return Boolean(
     f.fontFamily || f.bodyFontSize || f.headingFontSize ||
-    f.paragraphAlign || f.primaryColor || f.emphasisColor,
+    f.paragraphAlign || f.primaryColor || f.emphasisColor || f.highlightColor,
   );
 }
 
+
 function labelAlign(a: "left" | "center" | "right"): string {
   return { left: "왼쪽", center: "가운데", right: "오른쪽" }[a];
+}
+
+function HistoryModal({ list, onClose, onRestore }: {
+  list: Array<{ id: string; createdAt: string; profileInfo: any }> | null;
+  onClose: () => void;
+  onRestore: (id: string) => void;
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: 600, padding: 32 }}>
+        <h2 style={{ fontSize: 20, marginBottom: 16 }}>이전 스타일 불러오기 (롤백)</h2>
+        <p style={{ color: "var(--text-2)", marginBottom: 24, lineHeight: 1.5 }}>
+          과거에 분석했던 스타일 목록입니다. 복구하고 싶은 스타일을 선택하세요.
+        </p>
+        
+        {list === null ? (
+          <div style={{ textAlign: "center", padding: 40 }}>로딩 중...</div>
+        ) : list.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "var(--text-3)" }}>
+            저장된 이전 버전이 없습니다.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 450, overflowY: "auto", paddingRight: 4 }}>
+            {list.map(h => {
+              const isSelected = selectedId === h.id;
+              const p = h.profileInfo || {};
+              const tones = p.toneDistribution ? Object.entries(p.toneDistribution).map(([k]) => k).join(", ") : "정보 없음";
+              const exps = p.commonExpressions?.length ? p.commonExpressions.join(", ") : "특징적인 표현 없음";
+              
+              return (
+                <div key={h.id} 
+                  onClick={() => setSelectedId(h.id)}
+                  style={{
+                    background: isSelected ? "var(--bg-accent-subtle)" : "var(--bg-elevated)",
+                    border: isSelected ? "2px solid var(--accent)" : "1px solid var(--border-2)",
+                    padding: "16px", borderRadius: 8, cursor: "pointer", transition: "all 0.2s"
+                  }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                    <div style={{ fontWeight: 600, color: isSelected ? "var(--text-1)" : "var(--text-2)" }}>
+                      {new Date(h.createdAt).toLocaleString("ko-KR")}
+                    </div>
+                    <div style={{ fontSize: 13, color: "var(--text-3)" }}>
+                      학습 {p.sampleCount || 0}편
+                    </div>
+                  </div>
+                  
+                  <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: "8px 12px", fontSize: 13 }}>
+                    <div style={{ color: "var(--text-3)", textAlign: "right" }}>말투:</div>
+                    <div style={{ color: "var(--text-1)" }}>{tones}</div>
+                    
+                    <div style={{ color: "var(--text-3)", textAlign: "right" }}>자주 쓰는:</div>
+                    <div style={{ color: "var(--text-1)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {exps}
+                    </div>
+
+                    {(p.primaryColor || p.highlightColor) && (
+                      <>
+                        <div style={{ color: "var(--text-3)", textAlign: "right" }}>주요 색상:</div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          {p.primaryColor && (
+                            <span title="주 색상" style={{ display: "inline-block", width: 14, height: 14, borderRadius: "50%", background: p.primaryColor, border: "1px solid var(--border-2)" }} />
+                          )}
+                          {p.highlightColor && (
+                            <span title="강조 색상" style={{ display: "inline-block", width: 14, height: 14, borderRadius: "50%", background: p.highlightColor, border: "1px solid var(--border-2)" }} />
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end", gap: 12 }}>
+          <button className="btn btn--secondary" onClick={onClose}>취소</button>
+          <button className="btn btn--primary" 
+            disabled={!selectedId} 
+            onClick={() => { if (selectedId) onRestore(selectedId); }}>
+            선택한 스타일로 복구
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditProfileForm({ data, setData, onSave, onCancel }: {
+  data: StyleProfile;
+  setData: (d: StyleProfile) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const updateFormatting = (key: keyof StyleFormatting, value: any) => {
+    setData({
+      ...data,
+      formatting: { ...data.formatting, [key]: value } as StyleFormatting
+    });
+  };
+
+  return (
+    <section className="set-card" style={{ marginBottom: 32 }}>
+      <header className="set-card__head" style={{ marginBottom: 24 }}>
+        <h2 className="set-card__title">내 스타일 수동 편집</h2>
+        <span className="set-card__sub">분석된 내용이 마음에 들지 않으면, 직접 수정하고 고정시킬 수 있어요.</span>
+      </header>
+
+      <div className="field">
+        <label className="label">자주 쓰는 표현 (쉼표로 구분)</label>
+        <input className="input" 
+          value={data.commonExpressions ? data.commonExpressions.join(",") : ""}
+          onChange={(e) => setData({ ...data, commonExpressions: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
+          placeholder="예: 정말 맛있어요, 따뜻하고 포근한"
+        />
+      </div>
+
+      <div className="field">
+        <label className="label">글 구조 특징 / 메모</label>
+        <textarea className="input" style={{ minHeight: 100, padding: 12, resize: "vertical" }}
+          value={data.structureNotes || ""}
+          onChange={(e) => setData({ ...data, structureNotes: e.target.value })}
+          placeholder="도입부에는 날씨 인사를 하고 끝에는 내돈내산이라고 씀"
+        />
+      </div>
+
+      <div className="field">
+        <label className="label">사진 설명 스타일</label>
+        <input className="input" 
+          value={data.photoDescriptionStyle || ""}
+          onChange={(e) => setData({ ...data, photoDescriptionStyle: e.target.value })}
+        />
+      </div>
+
+      <hr style={{ margin: "24px 0", borderTop: "1px solid var(--border-2)" }} />
+      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>글자 및 서식</h3>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div className="field">
+          <label className="label">주 폰트</label>
+          <input className="input" value={data.formatting?.fontFamily || ""}
+            onChange={(e) => updateFormatting("fontFamily", e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="label">정렬</label>
+          <select className="input" value={data.formatting?.paragraphAlign || "left"}
+            onChange={(e) => updateFormatting("paragraphAlign", e.target.value)}>
+            <option value="left">왼쪽</option>
+            <option value="center">가운데</option>
+            <option value="right">오른쪽</option>
+          </select>
+        </div>
+        <div className="field">
+          <label className="label">본문 글자 크기 (px)</label>
+          <input className="input" type="number" value={data.formatting?.bodyFontSize || 15}
+            onChange={(e) => updateFormatting("bodyFontSize", Number(e.target.value))} />
+        </div>
+        <div className="field">
+          <label className="label">제목 글자 크기 (px)</label>
+          <input className="input" type="number" value={data.formatting?.headingFontSize || 24}
+            onChange={(e) => updateFormatting("headingFontSize", Number(e.target.value))} />
+        </div>
+        <div className="field">
+          <label className="label">주 색상</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input type="color" className="input" style={{ width: 50, padding: 0 }}
+              value={data.formatting?.primaryColor || "#333333"}
+              onChange={(e) => updateFormatting("primaryColor", e.target.value)} />
+            <input className="input" value={data.formatting?.primaryColor || ""}
+              onChange={(e) => updateFormatting("primaryColor", e.target.value)} />
+          </div>
+        </div>
+        <div className="field">
+          <label className="label">배경 강조색 (Highlight)</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input type="color" className="input" style={{ width: 50, padding: 0 }}
+              value={data.formatting?.highlightColor || "#ffffff"}
+              onChange={(e) => updateFormatting("highlightColor", e.target.value)} />
+            <input className="input" value={data.formatting?.highlightColor || ""}
+              onChange={(e) => updateFormatting("highlightColor", e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="result__actions" style={{ marginTop: 32 }}>
+        <button className="btn btn--secondary" onClick={onCancel}>취소</button>
+        <button className="btn btn--primary" onClick={onSave}>저장하기</button>
+      </div>
+    </section>
+  );
 }

@@ -3,16 +3,18 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useCounts } from "../lib/counts";
+import { useComposerState } from "../lib/composer-state";
 import {
   IconArrow, IconCopy, IconImage, IconPlus, IconRefresh, IconAlert, IconLock,
   IconCheck, IconInfo, IconTrash,
 } from "../lib/icons";
 import type {
   DraftPayload, DraftSummary, GenerateInput, ImageInput, PostType,
-  StyleFormatting, StyleProfile, Tone,
+  StyleProfile, Tone,
 } from "@shared/types";
 import type { GenerateOutcome } from "@shared/api";
 import { MAX_IMAGES } from "@shared/constants";
+import { buildStyledHtml, baseStyleFromFormatting } from "../lib/naver-preview";
 
 type Phase = "idle" | "validation" | "loading" | "result" | "error";
 
@@ -22,7 +24,7 @@ const POST_TYPES: { value: PostType; label: string }[] = [
   { value: "여행", label: "여행" },
   { value: "기타", label: "기타" },
 ];
-const LENGTHS = [500, 1000, 1500, 2000];
+const LENGTHS = [1500, 2000, 2500];
 const TONES: { value: Tone; label: string }[] = [
   { value: "my_style", label: "내 스타일" },
   { value: "해요", label: "해요체" },
@@ -69,109 +71,36 @@ function missingCount(m: MissingFields): number {
   return n;
 }
 
-function baseStyleFromFormatting(f: StyleFormatting | undefined): string {
-  if (!f) return "";
-  const parts: string[] = [];
-  if (f.fontFamily) parts.push(`font-family: '${f.fontFamily}', sans-serif`);
-  if (f.bodyFontSize) parts.push(`font-size: ${f.bodyFontSize}px`);
-  if (f.primaryColor) parts.push(`color: ${f.primaryColor}`);
-  parts.push("line-height: 1.6");
-  return parts.join(";");
-}
 
-function buildStyledHtml(
-  body: string,
-  profile: StyleProfile | null,
-  images: ImageInput[] = [],
-): string {
-  const formatting = profile?.formatting;
-  const align = formatting?.paragraphAlign ?? "left";
-  const color = formatting?.primaryColor ?? "";
-  const fontFamily = formatting?.fontFamily ?? "";
-  const bodyFontSize = formatting?.bodyFontSize
-    ? `${formatting.bodyFontSize}px`
-    : "";
-  const paragraphs = body
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  return paragraphs
-    .map((p) => {
-      const styles = [
-        `text-align:${align}`,
-        color ? `color:${color}` : "",
-        fontFamily ? `font-family:${fontFamily}` : "",
-        bodyFontSize ? `font-size:${bodyFontSize}` : "",
-      ]
-        .filter(Boolean)
-        .join(";");
-      const safe = p
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\n/g, "<br>");
-      const withInlineImages = safe.replace(
-        /\[사진(\d+)\]/g,
-        (match, n: string) => {
-          const idx = Number(n) - 1;
-          const img = images[idx];
-          if (!img) return match;
-          return (
-            `<span style="display:block;margin:8px 0;">` +
-            `<span style="display:inline-block;font-size:11px;font-weight:700;` +
-            `background:#fff;color:#ff5b2e;border:1px solid #ffd9c9;` +
-            `padding:2px 8px;border-radius:999px;margin-bottom:4px;">${match}</span><br>` +
-            `<img src="data:${img.mediaType};base64,${img.base64}" ` +
-            `alt="${match}" ` +
-            `style="max-width:280px;max-height:280px;display:block;` +
-            `border-radius:8px;border:1px solid #eee;" />` +
-            `</span>`
-          );
-        },
-      );
-      return `<p style="${styles}">${withInlineImages}</p>`;
-    })
-    .join("");
-}
 
 export default function Compose() {
   const { refresh: refreshCounts, samples, settings } = useCounts();
+  const {
+    postType, setPostType, postTypeExtra, setPostTypeExtra,
+    storeName, setStoreName, address, setAddress, visitDate, setVisitDate,
+    length, setLength, tone, setTone, title, setTitle,
+    keywords, setKeywords, keywordDraft, setKeywordDraft,
+    emphasis, setEmphasis, memo, setMemo, images, setImages,
+    currentDraftId, setCurrentDraftId, draftSavedAt, setDraftSavedAt,
+    phase, setPhase, showValidation, setShowValidation,
+    outcome, setOutcome, errorMessage, setErrorMessage,
+    reset: globalReset,
+  } = useComposerState();
+
   const [profile, setProfile] = useState<StyleProfile | null | undefined>(undefined);
   const hasApiKey: boolean | null = settings
     ? settings.hasApiKey[settings.provider]
     : null;
   const useWebSearchSetting = settings?.useWebSearch ?? false;
 
-  // form fields
-  const [postType, setPostType] = useState<PostType>("맛집");
-  const [postTypeExtra, setPostTypeExtra] = useState("");
-  const [storeName, setStoreName] = useState("");
-  const [address, setAddress] = useState("");
-  const [visitDate, setVisitDate] = useState("");
-  const [length, setLength] = useState(1500);
-  const [tone, setTone] = useState<Tone>("my_style");
-  const [title, setTitle] = useState("");
-  const [keywords, setKeywords] = useState<string[]>([]);
-  const [keywordDraft, setKeywordDraft] = useState("");
-  const [emphasis, setEmphasis] = useState("");
-  const [memo, setMemo] = useState("");
-  const [images, setImages] = useState<ImageInput[]>([]);
+  // UI-only local states
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
-
-  // drafts
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
   const [showDraftsModal, setShowDraftsModal] = useState(false);
-  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
-  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
   const [draftSavingState, setDraftSavingState] = useState<"idle" | "saving" | "error">("idle");
   const [, forceTick] = useState(0);
 
-  // flow state
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [showValidation, setShowValidation] = useState(false);
   const [progressStage, setProgressStage] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<GenerateOutcome | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [photoNotice, setPhotoNotice] = useState<string | null>(null);
   const [photoLoading, setPhotoLoading] = useState<{ done: number; total: number } | null>(null);
 
@@ -192,6 +121,15 @@ export default function Compose() {
     });
   }, []);
 
+  // 설정에서 저장된 기본값 적용 (최초 마운트 시에만)
+  useEffect(() => {
+    if (!settings) return;
+    if (settings.defaultPostType) setPostType(settings.defaultPostType as PostType);
+    if (settings.defaultLength) setLength(settings.defaultLength);
+    if (settings.defaultTone) setTone(settings.defaultTone as Tone);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!settings]);
+
   useEffect(() => {
     const off = api.generate.onProgress((stage) => {
       if (mountedRef.current) setProgressStage(stage);
@@ -205,7 +143,9 @@ export default function Compose() {
   );
   const missing = missingCount(validation);
 
-  const memoChars = memo.trim().length;
+  const memoChars = memo.replace(/\s/g, '').length;
+  const defLength = settings?.defaultLength || 1500;
+  const defTone = settings?.defaultTone || "my_style";
 
   // --- File handling ---
   const onFiles = async (files: FileList | null) => {
@@ -410,21 +350,14 @@ export default function Compose() {
   };
 
   const onReset = useCallback(() => {
-    setStoreName(""); setAddress(""); setVisitDate("");
-    setPostType("맛집"); setPostTypeExtra("");
-    setTitle(""); setKeywords([]); setKeywordDraft("");
-    setEmphasis(""); setMemo(""); setImages([]);
-    setLength(1500); setTone("my_style");
-    setShowValidation(false); setPhase("idle"); setOutcome(null); setErrorMessage(null);
+    globalReset();
     setPhotoNotice(null);
-    setCurrentDraftId(null);
-    setDraftSavedAt(null);
     setDraftSavingState("idle");
     if (photoNoticeTimerRef.current) {
       clearTimeout(photoNoticeTimerRef.current);
       photoNoticeTimerRef.current = null;
     }
-  }, []);
+  }, [globalReset]);
 
   // Profile / API key gating
   const profileLoading = profile === undefined;
@@ -637,16 +570,41 @@ export default function Compose() {
           </div>
 
           <div className="field">
-            <label className="label">글자 수</label>
+            <label className="label">글자 수 (공백 제외)</label>
             <div className="seg is-full">
               {LENGTHS.map((n) => (
                 <button key={n}
                   className={length === n ? "is-active" : ""}
                   onClick={() => setLength(n)}>
-                  {n}자{n === 1500 && <span className="badge-mini">기본</span>}
+                  {n}자{n === defLength && <span className="badge-mini">기본</span>}
                 </button>
               ))}
+              <button
+                className={!LENGTHS.includes(length) ? "is-active" : ""}
+                onClick={() => setLength(2100)}>
+                직접 입력
+              </button>
             </div>
+            {!LENGTHS.includes(length) && (
+              <div style={{ marginTop: 8, padding: "12px", background: "var(--bg-elevated)", borderRadius: "var(--r)", border: "1px solid var(--border-1)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>원하는 글자 수</span>
+                  <input type="number" 
+                    step={100}
+                    min={100}
+                    className="input" 
+                    style={{ width: "120px" }}
+                    placeholder="예: 2500"
+                    value={length}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val)) setLength(val);
+                    }}
+                  />
+                  <span className="helper">자 (공백 제외 기준)</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="field">
@@ -656,7 +614,7 @@ export default function Compose() {
                 <button key={t.value}
                   className={tone === t.value ? "is-active" : ""}
                   onClick={() => setTone(t.value)}>
-                  {t.label}{t.value === "my_style" && <span className="badge-mini">기본</span>}
+                  {t.label}{t.value === defTone && <span className="badge-mini">기본</span>}
                 </button>
               ))}
             </div>
@@ -690,7 +648,11 @@ export default function Compose() {
                 value={keywordDraft}
                 onChange={(e) => setKeywordDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") { e.preventDefault(); addKeyword(keywordDraft); }
+                  if (e.key === "Enter") {
+                    if (e.nativeEvent.isComposing) return;
+                    e.preventDefault();
+                    addKeyword(keywordDraft);
+                  }
                   else if (e.key === "Backspace" && keywordDraft === "" && keywords.length > 0) {
                     removeKeyword(keywords.length - 1);
                   }
@@ -702,7 +664,8 @@ export default function Compose() {
 
           <div className="field">
             <label className="label">강조 / 제외 사항</label>
-            <textarea className="textarea" rows={3}
+            <textarea className="textarea"
+              style={{ minHeight: "100px", resize: "vertical" }}
               value={emphasis} onChange={(e) => setEmphasis(e.target.value)}
               placeholder="예) 친구랑 오후 2시 방문. '직접 결제했다'는 표현은 빼줘. 2030 타겟." />
           </div>
@@ -710,7 +673,8 @@ export default function Compose() {
           <div className={"field" + (showValidation && (validation.memo.missing || validation.memo.short) ? " field--has-error" : "")}>
             <label className="label">방문 메모 <span className="req">*</span></label>
             <textarea className={"textarea textarea--lg" + (showValidation && (validation.memo.missing || validation.memo.short) ? " is-error" : "")}
-              rows={7} value={memo} onChange={(e) => setMemo(e.target.value)}
+              style={{ minHeight: "220px", resize: "vertical" }}
+              value={memo} onChange={(e) => setMemo(e.target.value)}
               placeholder="이번 방문의 키워드, 감상, 디테일을 자유롭게 적어주세요. 자세할수록 좋아요." />
             <div className="helper">
               <span className="char-count">{memoChars}자</span> · {memoChars < MIN_MEMO_CHARS
@@ -1209,7 +1173,7 @@ function ResultView({
   images: ImageInput[];
 }) {
   const r = outcome.result;
-  const bodyChars = r.body.length;
+  const bodyChars = r.body.replace(/\s/g, '').length;
   const [resultView, setResultView] = useState<"edit" | "preview">("edit");
   const copyBody = () => navigator.clipboard.writeText(r.body);
   const copyHashtags = () => navigator.clipboard.writeText(r.hashtags.map((h) => `#${h}`).join(" "));
@@ -1367,15 +1331,13 @@ function ResultView({
           <IconCopy />
           마크다운으로 복사
         </button>
-        {hasFormatting && (
-          <button className="btn btn--secondary" onClick={copyStyled}>
-            <IconCopy />
-            서식 포함 복사
-          </button>
-        )}
-        <button className="btn btn--primary" onClick={copyBody}>
+        <button className="btn btn--secondary" onClick={copyBody}>
           <IconCopy />
-          본문 복사
+          원문 복사
+        </button>
+        <button className="btn btn--primary" onClick={copyStyled}>
+          <IconCopy />
+          서식 복사 (네이버용)
         </button>
       </div>
     </div>

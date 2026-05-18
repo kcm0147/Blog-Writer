@@ -18,6 +18,7 @@ export interface AppApi {
     validateApiKey(p: Provider): Promise<{ ok: boolean; message?: string }>;
     getDataDir(): Promise<string>;
     setDataDir(newPath: string | null): Promise<{ ok: boolean; moved: boolean }>;
+    setDefaultValues(type: string, len: number, tone: string): Promise<void>;
   };
   dialog: {
     pickFolder(): Promise<string | null>;
@@ -46,6 +47,9 @@ export interface AppApi {
   style: {
     getProfile(): Promise<StyleProfile | null>;
     analyze(): Promise<StyleProfile>;
+    updateProfile(profile: StyleProfile): Promise<StyleProfile>;
+    listHistory(): Promise<Array<{ id: string; createdAt: string; profileInfo: any }>>;
+    restoreHistory(id: string): Promise<StyleProfile>;
     onProgress(cb: (stage: string) => void): () => void;
     onWarning(cb: (msg: string) => void): () => void;
   };
@@ -60,6 +64,7 @@ export interface AppApi {
     list(): Promise<HistoryRecord[]>;
     get(id: string): Promise<HistoryRecord | null>;
     delete(id: string): Promise<void>;
+    getImages(id: string): Promise<ImageInput[]>;
   };
   drafts: {
     list(): Promise<DraftSummary[]>;

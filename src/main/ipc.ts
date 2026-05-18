@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow, dialog } from "electron";
 import {
   getSettings, setProvider, setWebSearch, setApiKey, clearApiKey, getApiKey,
   isValidProvider, getDataDir, setCustomDataDir, cleanupOldDataDir,
-  getModel, setModel,
+  getModel, setModel, setDefaultValues,
 } from "./storage/settings";
 import { resolve } from "path";
 import {
@@ -10,7 +10,7 @@ import {
   getSampleHtml,
 } from "./storage/samples";
 import { scrapeNaverBlog } from "./scrapers/naverBlog";
-import { loadProfile } from "./storage/styleProfile";
+import { loadProfile, updateProfile, listProfileHistory, restoreProfileHistory } from "./storage/styleProfile";
 import { listHistory, getHistory, deleteHistory } from "./storage/history";
 import {
   saveDraft, listDrafts, getDraft, deleteDraft, type DraftPayload,
@@ -21,6 +21,7 @@ import { makeProvider } from "./llm";
 import { toUserMessage } from "./llm/errors";
 import { getDb, reopenDb } from "./db-singleton";
 import { prepareImage } from "./images/load";
+import { saveHistoryImages, loadHistoryImages, deleteHistoryImages } from "./images/historyImages";
 import type { Provider, GenerateInput } from "@shared/types";
 
 function emitProgress(channel: string, stage: string) {
@@ -46,6 +47,7 @@ export function registerIpc(): void {
   ipcMain.handle("settings:get", () => getSettings());
   ipcMain.handle("settings:setProvider", (_e, p: Provider) => setProvider(p));
   ipcMain.handle("settings:setWebSearch", (_e, on: boolean) => setWebSearch(on));
+  ipcMain.handle("settings:setDefaultValues", (_e, type: string, len: number, tone: string) => setDefaultValues(type, len, tone));
   ipcMain.handle("settings:setApiKey", (_e, p: Provider, key: string) => setApiKey(p, key));
   ipcMain.handle("settings:clearApiKey", (_e, p: Provider) => clearApiKey(p));
   ipcMain.handle("settings:setModel", (_e, p: Provider, model: string) => {
@@ -170,6 +172,9 @@ export function registerIpc(): void {
       throw new Error(toUserMessage(e));
     }
   });
+  ipcMain.handle("style:updateProfile", (_e, profile) => updateProfile(getDb(), profile));
+  ipcMain.handle("style:listHistory", () => listProfileHistory(getDb()));
+  ipcMain.handle("style:restoreHistory", (_e, id) => restoreProfileHistory(getDb(), id));
 
   ipcMain.handle("generate:run", async (_e, input: GenerateInput) => {
     try {
@@ -177,9 +182,18 @@ export function registerIpc(): void {
       if (!isValidProvider(provider)) throw new Error(`Invalid provider: ${String(provider)}`);
       const key = requireApiKey(provider);
       const model = getModel(provider);
-      return await runGenerate(getDb(), makeProvider(provider, key, model), input, {
+      const result = await runGenerate(getDb(), makeProvider(provider, key, model), input, {
         onProgress: (s) => emitProgress("generate:progress", s),
       });
+      // 이미지를 파일 시스템에 저장
+      if (result.record && input.images.length > 0) {
+        try {
+          saveHistoryImages(result.record.id, input.images);
+        } catch (imgErr) {
+          console.warn("[generate] 이미지 저장 실패 (글은 정상 생성됨)", imgErr);
+        }
+      }
+      return result;
     } catch (e) {
       console.error("generate:run error", e);
       throw new Error(toUserMessage(e));
@@ -190,8 +204,13 @@ export function registerIpc(): void {
   ipcMain.handle("history:get", (_e, id: string) =>
     getHistory(getDb(), requireId(id, "히스토리")),
   );
-  ipcMain.handle("history:delete", (_e, id: string) =>
-    deleteHistory(getDb(), requireId(id, "히스토리")),
+  ipcMain.handle("history:delete", (_e, id: string) => {
+    const validId = requireId(id, "히스토리");
+    deleteHistory(getDb(), validId);
+    deleteHistoryImages(validId);
+  });
+  ipcMain.handle("history:images", (_e, id: string) =>
+    loadHistoryImages(requireId(id, "히스토리")),
   );
 
   ipcMain.handle("drafts:list", () => listDrafts(getDb()));

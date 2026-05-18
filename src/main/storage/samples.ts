@@ -23,7 +23,7 @@ export function addSample(
   { label, body }: { label: string; body: string },
 ): Sample {
   const id = randomUUID();
-  const charCount = body.length;
+  const charCount = body.replace(/\s/g, '').length;
   const createdAt = new Date().toISOString();
   db.prepare(
     "INSERT INTO samples (id, label, body, char_count, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -35,7 +35,15 @@ export function listSamples(db: Database): Sample[] {
   const rows = db
     .prepare("SELECT * FROM samples ORDER BY created_at DESC")
     .all() as Row[];
-  return rows.map(toSample);
+
+  return rows.map((r) => {
+    // DB 값에 의존하지 않고 항상 실시간으로 공백 제외 길이를 반환 (안전)
+    const pureCount = r.body.replace(/\s/g, '').length;
+    return {
+      ...toSample(r),
+      charCount: pureCount
+    };
+  });
 }
 
 export function deleteSample(db: Database, id: string): void {
@@ -68,7 +76,7 @@ export function updateSample(
   }
   if (input.body !== undefined) {
     fields.push("body = ?", "char_count = ?");
-    values.push(input.body, input.body.length);
+    values.push(input.body, input.body.replace(/\s/g, '').length);
   }
   if (fields.length > 0) {
     values.push(input.id);

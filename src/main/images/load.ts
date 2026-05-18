@@ -1,4 +1,4 @@
-import sharp from "sharp";
+import { nativeImage } from "electron";
 import { extname } from "path";
 import type { ImageInput } from "@shared/types";
 
@@ -16,24 +16,28 @@ export async function prepareImage(
   }
   const isPng = ext === ".png";
 
-  let pipeline = sharp(buffer).rotate();
-  const meta = await sharp(buffer).metadata();
-  if (meta.width && meta.height && Math.max(meta.width, meta.height) > MAX_LONG_EDGE) {
-    pipeline = pipeline.resize({
-      width: MAX_LONG_EDGE,
-      height: MAX_LONG_EDGE,
-      fit: "inside",
-      withoutEnlargement: true,
+  let img = nativeImage.createFromBuffer(buffer);
+  if (img.isEmpty()) {
+    throw new Error("이미지 파일을 읽을 수 없습니다.");
+  }
+
+  const size = img.getSize();
+  if (size.width > 0 && size.height > 0 && Math.max(size.width, size.height) > MAX_LONG_EDGE) {
+    const isLandscape = size.width > size.height;
+    img = img.resize({
+      width: isLandscape ? MAX_LONG_EDGE : undefined,
+      height: !isLandscape ? MAX_LONG_EDGE : undefined,
+      quality: "good"
     });
   }
 
   let outBuf: Buffer;
   let mediaType: "image/jpeg" | "image/png";
   if (isPng) {
-    outBuf = await pipeline.png({ compressionLevel: 9 }).toBuffer();
+    outBuf = img.toPNG();
     mediaType = "image/png";
   } else {
-    outBuf = await pipeline.jpeg({ quality: 85, mozjpeg: true }).toBuffer();
+    outBuf = img.toJPEG(85);
     mediaType = "image/jpeg";
   }
 

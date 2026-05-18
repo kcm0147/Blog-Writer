@@ -17,6 +17,12 @@ CREATE TABLE IF NOT EXISTS style_profile (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS style_profile_history (
+  id TEXT PRIMARY KEY,
+  json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS generations (
   id TEXT PRIMARY KEY,
   store_name TEXT NOT NULL,

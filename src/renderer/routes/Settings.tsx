@@ -52,7 +52,7 @@ export default function Settings() {
 
         <div className="set-content">
           {tab === "ai" && <AITab s={s} refresh={refresh} />}
-          {tab === "defaults" && <DefaultsTab />}
+          {tab === "defaults" && <DefaultsTab s={s} refresh={refresh} />}
           {tab === "data" && <DataTab refresh={refresh} />}
           {tab === "about" && <AboutTab />}
         </div>
@@ -76,13 +76,13 @@ function SubnavLink({ active, onClick, icon, children }: {
 // ============ AI tab ============
 
 const CLAUDE_PRESETS = [
-  "claude-haiku-4-5-20251001",
-  "claude-sonnet-4-5",
-  "claude-opus-4-5",
+  "claude-sonnet-4-6",
+  "claude-opus-4-7",
+  "claude-haiku-4-5",
 ];
 const GEMINI_PRESETS = [
   "gemini-3.1-flash-lite",
-  "gemini-3-flash",
+  "gemini-3-flash-preview",
   "gemini-3.1-pro-preview",
 ];
 
@@ -351,55 +351,66 @@ function ProviderCard({ value, name, sub, badge, selected, onClick }: {
   );
 }
 
-// ============ Defaults tab (placeholder) ============
+// ============ Defaults tab ============
 
-function DefaultsTab() {
+function DefaultsTab({ s, refresh }: { s: SettingsWithKeyStatus; refresh: () => Promise<void> }) {
+  const currentType = s.defaultPostType || "맛집";
+  const currentLen = s.defaultLength || 1500;
+  const currentTone = s.defaultTone || "my_style";
+
+  const handleChange = async (newType: string, newLen: number, newTone: string) => {
+    await api.settings.setDefaultValues(newType, newLen, newTone);
+    await refresh();
+  };
+
   return (
     <section className="set-card">
       <header className="set-card__head">
         <div>
           <h2 className="set-card__title">글쓰기 기본값</h2>
           <p className="set-card__sub">
-            현재는 글 작성 화면에서 직접 선택해주세요. 기본값 저장 기능은 곧 추가될 예정이에요.
+            '새 글 작성'을 클릭했을 때 미리 세팅되어 있을 기본값을 설정합니다.
           </p>
         </div>
       </header>
       <div className="opt-row">
         <div className="opt-row__main">
           <div className="opt-row__title">기본 글 타입</div>
-          <div className="opt-row__sub">'새 글 만들기'를 누르면 미리 선택돼 있는 타입.</div>
+          <div className="opt-row__sub">선택된 카테고리의 템플릿과 키워드를 기준으로 글을 생성합니다.</div>
         </div>
         <div className="seg">
-          <button className="is-active" disabled>맛집 후기</button>
-          <button disabled>카페</button>
-          <button disabled>여행</button>
-          <button disabled>기타</button>
+          {["맛집", "카페", "여행", "기타"].map(type => (
+            <button key={type} className={currentType === type ? "is-active" : ""} onClick={() => handleChange(type, currentLen, currentTone)}>
+              {type}{type !== "기타" ? " 후기" : ""}
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="opt-row">
         <div className="opt-row__main">
-          <div className="opt-row__title">기본 글자 수</div>
+          <div className="opt-row__title">기본 글자 수 (공백 제외)</div>
           <div className="opt-row__sub">1500자가 네이버 블로그 상위 노출에 가장 효과적이에요.</div>
         </div>
         <div className="seg">
-          <button disabled>500</button>
-          <button disabled>1000</button>
-          <button className="is-active" disabled>1500</button>
-          <button disabled>2000</button>
+          {[1500, 2000, 2500].map(len => (
+            <button key={len} className={currentLen === len ? "is-active" : ""} onClick={() => handleChange(currentType, len, currentTone)}>
+              {len}자
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="opt-row">
         <div className="opt-row__main">
           <div className="opt-row__title">기본 말투</div>
-          <div className="opt-row__sub">'내 스타일'은 학습된 글에서 자동으로 만들어진 말투예요.</div>
+          <div className="opt-row__sub">'내 스타일'은 '내가 쓴 글에서 추출한' 맞춤형 어투입니다.</div>
         </div>
         <div className="seg">
-          <button className="is-active" disabled>내 스타일</button>
-          <button disabled>해요체</button>
-          <button disabled>합니다체</button>
-          <button disabled>반말</button>
+          <button className={currentTone === "my_style" ? "is-active" : ""} onClick={() => handleChange(currentType, currentLen, "my_style")}>내 스타일</button>
+          <button className={currentTone === "해요" ? "is-active" : ""} onClick={() => handleChange(currentType, currentLen, "해요")}>해요체</button>
+          <button className={currentTone === "합니다" ? "is-active" : ""} onClick={() => handleChange(currentType, currentLen, "합니다")}>합니다체</button>
+          <button className={currentTone === "반말" ? "is-active" : ""} onClick={() => handleChange(currentType, currentLen, "반말")}>반말</button>
         </div>
       </div>
     </section>
