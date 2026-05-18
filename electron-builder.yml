@@ -1,5 +1,6 @@
 appId: com.naver-blog-writer.app
-productName: 네이버 블로그 작성기
+productName: Naver Blog Writer
+executableName: NaverBlogWriter
 directories:
   output: release
 files:
@@ -15,7 +16,7 @@ mac:
 win:
   target:
     - nsis
-  artifactName: ${productName}-${version}-setup.${ext}
+  artifactName: Naver Blog Writer-${version}-setup.${ext}
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
